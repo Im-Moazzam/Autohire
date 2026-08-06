@@ -1,6 +1,6 @@
 # TS-00: Bootstrap the repository
 
-- **Status:** Todo
+- **Status:** In Progress (frontend section done on `chore/TS-00-frontend`; backend done separately on `chore/TS-00-backend`; E2E/Wire-up still open)
 - **Owner:** Both, together, one sitting
 - **Points:** 3
 
@@ -41,16 +41,17 @@ No features. No auth. No AI. Plumbing only.
 
 ## Frontend
 
-- [ ] `npm create vite@latest frontend -- --template react-ts`
-- [ ] Tailwind installed. **Check the major version** — the shipped
+- [x] `npm create vite@latest frontend -- --template react-ts`
+- [x] Tailwind installed. **Check the major version** — the shipped
       `src/styles/tokens.css` uses v4 `@theme` syntax. If you end up on v3, convert
       those tokens into `tailwind.config.js` instead. Do not mix.
-- [ ] `frontend/Dockerfile` — node:20-alpine, workdir `/app`
-- [ ] React Router with two shells: authenticated app, and bare public layout
-- [ ] TanStack Query provider
-- [ ] `src/lib/api.ts` — fetch wrapper reading `VITE_API_URL`
-- [ ] Vitest + React Testing Library, one trivial passing test
-- [ ] `/kitchen-sink` route (dev only) rendering every `components/ui` primitive —
+      → npm shipped Tailwind 4.3.3; wired via `@tailwindcss/vite`, no conversion needed.
+- [x] `frontend/Dockerfile` — node:20-alpine, workdir `/app`
+- [x] React Router with two shells: authenticated app, and bare public layout
+- [x] TanStack Query provider
+- [x] `src/lib/api.ts` — fetch wrapper reading `VITE_API_URL`
+- [x] Vitest + React Testing Library, one trivial passing test
+- [x] `/kitchen-sink` route (dev only) rendering every `components/ui` primitive —
       this is your Storybook replacement, ~20 lines, no maintenance burden
 
 ## UI primitives — build these now, before any screen

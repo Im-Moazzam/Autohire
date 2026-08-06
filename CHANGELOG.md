@@ -15,6 +15,18 @@ Tag a release at each sprint demo (`v0.3-sprint7`) and move `[Unreleased]` down.
 - `docs/drift.md`: three undocumented rows (`apply_slug`, `email_logs.idempotency_key`,
   `PARSE_ERROR`) that `docs/schema.md` already flagged as ERD additions but that
   hadn't been logged
+- Frontend scaffold: Vite + React 19 + TypeScript, Tailwind v4 wired to the existing
+  `tokens.css` (npm shipped v4 already, no v3-to-config conversion needed), React
+  Router with `AppShell` (authenticated) and `PublicLayout` (bare candidate-facing)
+  route trees, TanStack Query provider, `src/lib/api.ts` fetch wrapper reading
+  `VITE_API_URL` (TS-00)
+- 12 UI primitives in `src/components/ui`: Button, Input, Select, Textarea, FileInput,
+  DataTable, Modal, StatusBadge, MatchScore, Card, EmptyState, Toast — each stubbing
+  loading/disabled/error states per `docs/checklists/ux.md`, tokens only, Modal built
+  on the native `<dialog>` element (TS-00)
+- `/kitchen-sink` dev-only route rendering every primitive and its states (TS-00)
+- Vitest + React Testing Library wired up with one passing test (TS-00)
+- `frontend/Dockerfile` (node:20-alpine) (TS-00)
 
 ### Changed
 
