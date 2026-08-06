@@ -42,6 +42,12 @@
   reformatting the openapi-typescript output on every commit, which would
   have made the `contract` CI job's raw diff fail on every future
   `make api-client` regenerate (TS-00)
+- CI: `backend` job's `TOKEN_ENCRYPTION_KEY: ${{ steps.fernet.outputs.key }}`
+  was set in job-level `env:`, which GitHub Actions evaluates before any
+  step runs — `steps.*` isn't valid there, so every push touching this repo
+  has failed CI instantly regardless of code correctness, since before
+  TS-00. Fixed by writing the key to `$GITHUB_ENV` from the fernet step
+  instead; same bug fixed in the newly-uncommented `contract` job (TS-00)
 - CI: `contract`/`e2e` jobs were live despite a comment saying they were disabled
   pending TS-00; actually commented out, with their two latent env bugs fixed so
   they work once uncommented (TS-00)

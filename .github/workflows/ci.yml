@@ -27,14 +27,12 @@ jobs:
       DATABASE_URL: postgresql+psycopg://autohire:autohire@localhost:5432/autohire_test
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-placeholder
-      TOKEN_ENCRYPTION_KEY: ${{ steps.fernet.outputs.key }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12", cache: pip }
       - run: pip install -r backend/requirements-dev.txt
-      - id: fernet
-        run: echo "key=$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')" >> "$GITHUB_OUTPUT"
+      - run: echo "TOKEN_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - run: ruff check backend
       - run: mypy backend/app
       - run: alembic upgrade head
@@ -70,7 +68,6 @@ jobs:
       DATABASE_URL: postgresql+psycopg://autohire:autohire@localhost:5432/autohire_test
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: ci-placeholder
-      TOKEN_ENCRYPTION_KEY: ${{ steps.fernet.outputs.key }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -78,8 +75,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
       - run: pip install -r backend/requirements.txt cryptography
-      - id: fernet
-        run: echo "key=$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')" >> "$GITHUB_OUTPUT"
+      - run: echo "TOKEN_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - run: python -m app.scripts.dump_openapi > /tmp/openapi.json
         working-directory: backend
       - run: npx openapi-typescript /tmp/openapi.json -o /tmp/api.d.ts
