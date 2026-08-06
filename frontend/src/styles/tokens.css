@@ -1,0 +1,92 @@
+/* AutoHire design tokens — generated from docs/design.md
+ * Tailwind v4 CSS-first config. This file is the single source of truth for
+ * colour, type, spacing and radius. Never write a raw hex value in a component.
+ */
+@import "tailwindcss";
+
+@theme {
+  /* ---- Colour ---- */
+  --color-primary:        #2563EB;
+  --color-primary-soft:   #EFF6FF;
+  --color-navy:           #0F172A;
+  --color-cyan:           #06B6D4;
+  --color-ai:             #7C3AED;
+  --color-success:        #16A34A;
+  --color-warning:        #F59E0B;
+  --color-error:          #DC2626;
+  --color-canvas:         #F8FAFC;
+  --color-surface:        #FFFFFF;
+  --color-border:         #E2E8F0;
+  --color-muted:          #64748B;
+  --color-ink:            #0F172A;
+
+  /* Match-score thresholds — used by the MatchScore badge */
+  --color-score-strong:   #16A34A;
+  --color-score-good:     #06B6D4;
+  --color-score-partial:  #F59E0B;
+  --color-score-weak:     #DC2626;
+
+  /* ---- Type ---- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --text-display:      4rem;      /* 64 */
+  --text-display--line-height: 1.05;
+  --text-display--font-weight: 700;
+
+  --text-page:         2rem;      /* 32 */
+  --text-page--line-height: 1.2;
+  --text-page--font-weight: 600;
+
+  --text-section:      1.5rem;    /* 24 */
+  --text-section--line-height: 1.3;
+  --text-section--font-weight: 600;
+
+  --text-card:         1.125rem;  /* 18 */
+  --text-card--line-height: 1.4;
+  --text-card--font-weight: 600;
+
+  --text-body:         1rem;      /* 16 */
+  --text-body--line-height: 1.5;
+
+  --text-table:        0.875rem;  /* 14 */
+  --text-table--line-height: 1.45;
+
+  --text-helper:       0.8125rem; /* 13 */
+  --text-helper--line-height: 1.4;
+
+  /* ---- Radius ---- */
+  --radius-sm:      4px;
+  --radius-md:      8px;
+  --radius-control: 10px;   /* buttons + inputs */
+  --radius-card:    16px;   /* cards + modals */
+  --radius-xl:      24px;
+
+  /* ---- Layout ---- */
+  --spacing-sidebar: 260px;
+  --spacing-header:  72px;
+  --spacing-section: 32px;
+
+  /* ---- Elevation ---- */
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04),
+                 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-modal: 0 20px 25px -5px rgb(15 23 42 / 0.10),
+                  0 8px 10px -6px rgb(15 23 42 / 0.10);
+}
+
+@layer base {
+  html { font-family: var(--font-sans); }
+  body { background: var(--color-canvas); color: var(--color-ink); }
+
+  /* Accessibility floor — design.md requires visible focus on all interactive elements */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
