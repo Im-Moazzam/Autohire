@@ -1,8 +1,11 @@
 # AutoHire Database Schema
 
 PostgreSQL 16 + pgvector. 14 entities. Transcribed from `autohire_erd_final.puml`
-(the submitted SDS Phase II ERD). **This document and the ERD must stay in sync** —
-if you change one, change the other and note it in the changelog.
+(the submitted SDS Phase II ERD) as a starting point. **These are working notes, not
+a contract** — the Alembic migrations are the schema (see `docs/README.md`). Update
+this file when it gets badly wrong, but don't agonise over sync; `make docs-erd`
+renders the real diagram from the live database, and this file gets deleted once
+SQLAlchemy models exist.
 
 Conventions: all PKs are `UUID DEFAULT gen_random_uuid()`. All timestamps are
 `TIMESTAMPTZ`. Soft-deletable tables carry `deleted_at TIMESTAMPTZ NULL`.

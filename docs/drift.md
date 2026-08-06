@@ -14,3 +14,6 @@ baseline. At submission this becomes the SDS revision history and §8 design evo
 | 4 | Four email endpoints by type | One `POST /emails/send` with a `type` field | Same handler, same logging; four routes was duplication | — | 2026-08-06 |
 | 5 | TemplateField has no options storage | Added `options JSONB` | MULTIPLE_CHOICE and DROPDOWN are unimplementable without it | — | 2026-08-06 |
 | 6 | AIAnalysisResult has no evidence field | Added `evidence_snippets JSONB` | US-23 explainability had nowhere to store data | — | 2026-08-06 |
+| 7 | `job_postings` has no public URL field, form access assumed via Google Form | Added `apply_slug VARCHAR(64) UNIQUE` — random 16-char token, not the job UUID | Public apply link needed a non-enumerable identifier once forms were self-hosted (ADR-001) | ADR-001 / US-06 | 2026-08-06 |
+| 8 | `email_logs` has no uniqueness constraint on sends | Added `idempotency_key VARCHAR(255) UNIQUE` | Structurally prevents duplicate sends (defect #6) instead of relying on application logic | — | 2026-08-06 |
+| 9 | `submission_status_enum` had no failure state | Added `PARSE_ERROR` | A batch must continue past one bad resume (US-16); needed a status to land on | — | 2026-08-06 |

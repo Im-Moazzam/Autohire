@@ -1,8 +1,15 @@
 # API Contract
 
-**The generated OpenAPI spec is the source of truth, not this file.** Run
-`make openapi` to dump `docs/openapi.json` from the live app; that is what goes in
-the final report. This file exists to fix conventions before the first route is written.
+**The generated OpenAPI spec is the source of truth, not this file.** Two Makefile
+targets dump it, for two different purposes — don't merge them:
+
+- `make api-client` — dumps `docs/openapi.json`, regenerates
+  `frontend/src/lib/api.d.ts` from it. Run this after every route change; it's what
+  the CI `contract` job checks for staleness.
+- `make docs-api` (part of `make docs`) — dumps `docs/generated/openapi.json`, a
+  point-in-time snapshot for the report. Run before advisor meetings and submission.
+
+This file exists to fix conventions before the first route is written.
 
 The endpoint list below is derived from SDS Phase II §6, with four corrections applied:
 a version prefix, pagination on all list endpoints, one consistent verb convention,

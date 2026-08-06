@@ -20,8 +20,13 @@ No features. No auth. No AI. Plumbing only.
 
 - [ ] `backend/requirements.txt` — fastapi, uvicorn[standard], sqlalchemy>=2, alembic,
       psycopg[binary], pydantic>=2, pydantic-settings, celery, redis, python-multipart
-- [ ] `backend/requirements-dev.txt` — pytest, pytest-cov, pytest-html, httpx,
-      factory-boy, ruff, mypy, pyreverse (via pylint)
+- [ ] `backend/requirements-dev.txt` — first line `-r requirements.txt` (CI installs
+      only this file for the backend job, so it must pull the runtime deps in too),
+      then pytest, pytest-cov, pytest-html, httpx, factory-boy, ruff, mypy,
+      pyreverse (via pylint)
+- [ ] `backend/pyproject.toml` — ruff + mypy config. Without this the pre-commit
+      mypy hook has nothing to configure and will start blocking commits the
+      moment `app/main.py` imports FastAPI/Celery/pydantic-settings
 - [ ] `backend/Dockerfile` — python:3.12-slim, install requirements, workdir `/app`
 - [ ] `backend/app/main.py` — FastAPI app, `/api/v1` router prefix, `GET /api/v1/health`
 - [ ] `backend/app/core/config.py` — pydantic-settings reading every var in `.env.example`
@@ -67,6 +72,9 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
 
 - [ ] `make api-client` runs and produces `frontend/src/lib/api.d.ts`; commit it
 - [ ] `pre-commit install`, then `pre-commit run --all-files` passes
+- [ ] Uncomment the `contract` and `e2e` jobs in `.github/workflows/ci.yml`
+      (they're commented out until the scripts and `e2e/` folder they depend
+      on exist — that's now)
 - [ ] Push a branch, confirm all four CI jobs go green
 
 ## Acceptance
