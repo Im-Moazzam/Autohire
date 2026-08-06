@@ -1,6 +1,8 @@
 # TS-00: Bootstrap the repository
 
-- **Status:** In Progress (frontend section done on `chore/TS-00-frontend`; backend done separately on `chore/TS-00-backend`; E2E/Wire-up still open)
+- **Status:** In Progress — Backend and E2E scaffold sections done; Frontend, UI
+  primitives, and Wire-up remain (Frontend/UI primitives are in progress on a
+  separate branch; Wire-up depends on that branch landing)
 - **Owner:** Both, together, one sitting
 - **Points:** 3
 
@@ -18,26 +20,26 @@ No features. No auth. No AI. Plumbing only.
 
 ## Backend
 
-- [ ] `backend/requirements.txt` — fastapi, uvicorn[standard], sqlalchemy>=2, alembic,
+- [x] `backend/requirements.txt` — fastapi, uvicorn[standard], sqlalchemy>=2, alembic,
       psycopg[binary], pydantic>=2, pydantic-settings, celery, redis, python-multipart
-- [ ] `backend/requirements-dev.txt` — first line `-r requirements.txt` (CI installs
+- [x] `backend/requirements-dev.txt` — first line `-r requirements.txt` (CI installs
       only this file for the backend job, so it must pull the runtime deps in too),
       then pytest, pytest-cov, pytest-html, httpx, factory-boy, ruff, mypy,
       pyreverse (via pylint)
-- [ ] `backend/pyproject.toml` — ruff + mypy config. Without this the pre-commit
+- [x] `backend/pyproject.toml` — ruff + mypy config. Without this the pre-commit
       mypy hook has nothing to configure and will start blocking commits the
       moment `app/main.py` imports FastAPI/Celery/pydantic-settings
-- [ ] `backend/Dockerfile` — python:3.12-slim, install requirements, workdir `/app`
-- [ ] `backend/app/main.py` — FastAPI app, `/api/v1` router prefix, `GET /api/v1/health`
-- [ ] `backend/app/core/config.py` — pydantic-settings reading every var in `.env.example`
-- [ ] `backend/app/core/db.py` — engine, session factory, `Base`
-- [ ] `backend/app/worker.py` — Celery app wired to `REDIS_URL`
-- [ ] `alembic init` inside `backend/`, `env.py` pointed at `Base.metadata` and
+- [x] `backend/Dockerfile` — python:3.12-slim, install requirements, workdir `/app`
+- [x] `backend/app/main.py` — FastAPI app, `/api/v1` router prefix, `GET /api/v1/health`
+- [x] `backend/app/core/config.py` — pydantic-settings reading every var in `.env.example`
+- [x] `backend/app/core/db.py` — engine, session factory, `Base`
+- [x] `backend/app/worker.py` — Celery app wired to `REDIS_URL`
+- [x] `alembic init` inside `backend/`, `env.py` pointed at `Base.metadata` and
       `DATABASE_URL`; first migration enables `pgcrypto` and `vector` extensions
-- [ ] `backend/app/scripts/dump_openapi.py` — prints `app.openapi()` as JSON to stdout
-- [ ] `backend/app/scripts/dump_erd.py` — renders PlantUML from `Base.metadata`
-- [ ] `backend/app/scripts/seed.py` — empty stub for now, real seed data comes later
-- [ ] `backend/tests/test_health.py` — asserts `/api/v1/health` returns 200
+- [x] `backend/app/scripts/dump_openapi.py` — prints `app.openapi()` as JSON to stdout
+- [x] `backend/app/scripts/dump_erd.py` — renders PlantUML from `Base.metadata`
+- [x] `backend/app/scripts/seed.py` — empty stub for now, real seed data comes later
+- [x] `backend/tests/test_health.py` — asserts `/api/v1/health` returns 200
 
 ## Frontend
 
@@ -66,8 +68,9 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
 
 ## E2E
 
-- [ ] `e2e/` with Playwright config pointed at `http://localhost:5173`
-- [ ] One smoke test: app loads, health endpoint reachable
+- [x] `e2e/` with Playwright config pointed at `http://localhost:5173`
+- [x] One smoke test: app loads, health endpoint reachable (written; not yet run
+      end-to-end — needs the frontend branch to land first)
 
 ## Wire-up
 

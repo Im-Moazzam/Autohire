@@ -1,11 +1,5 @@
 # Changelog
 
-All notable changes to AutoHire. Format based on [Keep a Changelog](https://keepachangelog.com).
-Every entry ends with its story ID. Updated by `/wrap` at the end of each session —
-an entry here is the difference between work that counts and work that vanishes.
-
-Tag a release at each sprint demo (`v0.3-sprint7`) and move `[Unreleased]` down.
-
 ## [Unreleased]
 
 ### Added
@@ -47,3 +41,6 @@ Tag a release at each sprint demo (`v0.3-sprint7`) and move `[Unreleased]` down.
 
 ### Removed
 - Google Forms API from the runtime path — see ADR-001
+- Backend FastAPI app boots with a working `/api/v1/health` endpoint (TS-00)
+- Database bootstrap: Alembic wired up, first migration enables the `pgcrypto` and `vector` Postgres extensions (TS-00)
+- Playwright E2E scaffold in `e2e/`, ready for the smoke test once the frontend lands (TS-00)

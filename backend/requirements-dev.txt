@@ -1,0 +1,9 @@
+-r requirements.txt
+pytest
+pytest-cov
+pytest-html
+httpx
+factory-boy
+ruff
+mypy
+pylint
