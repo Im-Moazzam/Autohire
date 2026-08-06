@@ -3,11 +3,11 @@ index cd26162..af60c3e 100644
 --- a/.env.example
 +++ b/.env.example
 @@ -9,6 +9,7 @@ REDIS_URL=redis://redis:6379/0
- 
+
  FRONTEND_URL=http://localhost:5173
  PUBLIC_APPLY_BASE_URL=http://localhost:5173/apply
 +VITE_API_URL=http://localhost:8000/api/v1
- 
+
  # --- Google (leave blank while APP_ENV=local) ---
  GOOGLE_CLIENT_ID=
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
@@ -21,12 +21,12 @@ index b050bc7..a473e15 100644
 -      - run: pytest --cov=app --cov-report=term-missing --cov-fail-under=70
 +      - run: pytest --cov=app/services --cov-report=term-missing --cov-fail-under=70
          working-directory: backend
- 
+
    frontend:
 @@ -55,40 +55,53 @@ jobs:
        - run: npm run build
          working-directory: frontend
- 
+
 -  # NOTE: the `contract` and `e2e` jobs below stay commented out until TS-00
 +  # NOTE: the `contract` and `e2e` jobs below are commented out until TS-00
    # (bootstrap) lands the scripts and the e2e/ folder they depend on. Uncomment
@@ -118,7 +118,7 @@ index c839b19..283eef3 100644
 --- a/CHANGELOG.md
 +++ b/CHANGELOG.md
 @@ -10,10 +10,28 @@ Tag a release at each sprint demo (`v0.3-sprint7`) and move `[Unreleased]` down.
- 
+
  ### Added
  - Repository scaffold: CLAUDE.md, docs, ADR-001/002/003, Docker stack, design tokens
 +- `backend/pyproject.toml` — ruff/mypy config, ahead of TS-00 so pre-commit has
@@ -126,9 +126,9 @@ index c839b19..283eef3 100644
 +- `docs/drift.md`: three undocumented rows (`apply_slug`, `email_logs.idempotency_key`,
 +  `PARSE_ERROR`) that `docs/schema.md` already flagged as ERD additions but that
 +  hadn't been logged
- 
+
  ### Changed
- 
+
  ### Fixed
 +- CI: `contract`/`e2e` jobs were live despite a comment saying they were disabled
 +  pending TS-00; actually commented out, with their two latent env bugs fixed so
@@ -143,7 +143,7 @@ index c839b19..283eef3 100644
 +  at the two real ones (`api-client`, `docs-api`) and clarified their purposes
 +- `docs/schema.md`: opening line told sessions to hand-sync this file with the
 +  ERD, contradicting the code-is-truth model everywhere else in the repo
- 
+
  ### Removed
  - Google Forms API from the runtime path — see ADR-001
 diff --git a/docker-compose.yml b/docker-compose.yml
@@ -168,14 +168,14 @@ index 05501ca..f5bdfec 100644
 +    env_file: .env
      volumes: ["./frontend:/app", "/app/node_modules"]
      ports: ["5173:5173"]
- 
+
 diff --git a/docs/api-contract.md b/docs/api-contract.md
 index 48a2f66..d787aa1 100644
 --- a/docs/api-contract.md
 +++ b/docs/api-contract.md
 @@ -1,8 +1,15 @@
  # API Contract
- 
+
 -**The generated OpenAPI spec is the source of truth, not this file.** Run
 -`make openapi` to dump `docs/openapi.json` from the live app; that is what goes in
 -the final report. This file exists to fix conventions before the first route is written.
@@ -189,7 +189,7 @@ index 48a2f66..d787aa1 100644
 +  point-in-time snapshot for the report. Run before advisor meetings and submission.
 +
 +This file exists to fix conventions before the first route is written.
- 
+
  The endpoint list below is derived from SDS Phase II §6, with four corrections applied:
  a version prefix, pagination on all list endpoints, one consistent verb convention,
 diff --git a/docs/drift.md b/docs/drift.md
@@ -209,7 +209,7 @@ index 0bc3361..d487811 100644
 +++ b/docs/schema.md
 @@ -1,8 +1,11 @@
  # AutoHire Database Schema
- 
+
  PostgreSQL 16 + pgvector. 14 entities. Transcribed from `autohire_erd_final.puml`
 -(the submitted SDS Phase II ERD). **This document and the ERD must stay in sync** —
 -if you change one, change the other and note it in the changelog.
@@ -218,7 +218,7 @@ index 0bc3361..d487811 100644
 +this file when it gets badly wrong, but don't agonise over sync; `make docs-erd`
 +renders the real diagram from the live database, and this file gets deleted once
 +SQLAlchemy models exist.
- 
+
  Conventions: all PKs are `UUID DEFAULT gen_random_uuid()`. All timestamps are
  `TIMESTAMPTZ`. Soft-deletable tables carry `deleted_at TIMESTAMPTZ NULL`.
 diff --git a/docs/stories/TS-00-bootstrap.md b/docs/stories/TS-00-bootstrap.md
@@ -226,7 +226,7 @@ index 15801f7..63340a8 100644
 --- a/docs/stories/TS-00-bootstrap.md
 +++ b/docs/stories/TS-00-bootstrap.md
 @@ -20,8 +20,13 @@ No features. No auth. No AI. Plumbing only.
- 
+
  - [ ] `backend/requirements.txt` — fastapi, uvicorn[standard], sqlalchemy>=2, alembic,
        psycopg[binary], pydantic>=2, pydantic-settings, celery, redis, python-multipart
 -- [ ] `backend/requirements-dev.txt` — pytest, pytest-cov, pytest-html, httpx,
@@ -242,12 +242,12 @@ index 15801f7..63340a8 100644
  - [ ] `backend/app/main.py` — FastAPI app, `/api/v1` router prefix, `GET /api/v1/health`
  - [ ] `backend/app/core/config.py` — pydantic-settings reading every var in `.env.example`
 @@ -67,6 +72,9 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
- 
+
  - [ ] `make api-client` runs and produces `frontend/src/lib/api.d.ts`; commit it
  - [ ] `pre-commit install`, then `pre-commit run --all-files` passes
 +- [ ] Uncomment the `contract` and `e2e` jobs in `.github/workflows/ci.yml`
 +      (they're commented out until the scripts and `e2e/` folder they depend
 +      on exist — that's now)
  - [ ] Push a branch, confirm all four CI jobs go green
- 
+
  ## Acceptance

@@ -21,10 +21,27 @@
 - `/kitchen-sink` dev-only route rendering every primitive and its states (TS-00)
 - Vitest + React Testing Library wired up with one passing test (TS-00)
 - `frontend/Dockerfile` (node:20-alpine) (TS-00)
+- Wire-up: `docs/openapi.json` and `frontend/src/lib/api.d.ts` generated via
+  `make api-client` (first real run of this target) and committed; empty
+  `backend/app/services/` package added ahead of the first service (TS-00)
 
 ### Changed
+- `backend/Dockerfile` installs `requirements-dev.txt` (which pulls in
+  `requirements.txt`) instead of runtime-only deps, so `make test`'s
+  `docker compose exec api pytest` has pytest/ruff/mypy available in the
+  image (TS-00)
+- CI: `contract` and `e2e` jobs uncommented in `.github/workflows/ci.yml`,
+  now that the scripts and `e2e/` folder they depend on exist (TS-00)
 
 ### Fixed
+- Backend coverage gate (`--cov=app/services --cov-fail-under=70`) had no
+  `app/services` package to measure, so it always failed 0% regardless of
+  test count; added the (currently empty) package so the gate has a valid
+  target ahead of the first real service (TS-00)
+- `.prettierignore` added for `frontend/src/lib/api.d.ts` — prettier was
+  reformatting the openapi-typescript output on every commit, which would
+  have made the `contract` CI job's raw diff fail on every future
+  `make api-client` regenerate (TS-00)
 - CI: `contract`/`e2e` jobs were live despite a comment saying they were disabled
   pending TS-00; actually commented out, with their two latent env bugs fixed so
   they work once uncommented (TS-00)

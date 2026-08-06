@@ -1,26 +1,26 @@
-import type { ReactNode } from 'react'
-import { EmptyState } from './EmptyState'
+import type { ReactNode } from "react";
+import { EmptyState } from "./EmptyState";
 
 export interface DataTableColumn<T> {
-  key: string
-  header: string
-  render?: (row: T) => ReactNode
+  key: string;
+  header: string;
+  render?: (row: T) => ReactNode;
 }
 
 export interface DataTableProps<T> {
-  columns: DataTableColumn<T>[]
-  rows: T[]
-  rowKey: (row: T) => string
-  isLoading?: boolean
+  columns: DataTableColumn<T>[];
+  rows: T[];
+  rowKey: (row: T) => string;
+  isLoading?: boolean;
   /** Full-table failure — nothing loaded. */
-  errorText?: string
-  onRetry?: () => void
-  emptyTitle?: string
-  emptyDescription?: string
-  emptyActionLabel?: string
-  onEmptyAction?: () => void
+  errorText?: string;
+  onRetry?: () => void;
+  emptyTitle?: string;
+  emptyDescription?: string;
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
   /** Partial/degraded state: flag individual rows that failed without dropping the rest. */
-  rowError?: (row: T) => string | undefined
+  rowError?: (row: T) => string | undefined;
 }
 
 export function DataTable<T>({
@@ -30,7 +30,7 @@ export function DataTable<T>({
   isLoading = false,
   errorText,
   onRetry,
-  emptyTitle = 'Nothing here yet',
+  emptyTitle = "Nothing here yet",
   emptyDescription,
   emptyActionLabel,
   onEmptyAction,
@@ -42,10 +42,10 @@ export function DataTable<T>({
         variant="error"
         title="Couldn't load this table"
         description={errorText}
-        actionLabel={onRetry ? 'Retry' : undefined}
+        actionLabel={onRetry ? "Retry" : undefined}
         onAction={onRetry}
       />
-    )
+    );
   }
 
   if (!isLoading && rows.length === 0) {
@@ -56,7 +56,7 @@ export function DataTable<T>({
         actionLabel={emptyActionLabel}
         onAction={onEmptyAction}
       />
-    )
+    );
   }
 
   return (
@@ -65,7 +65,10 @@ export function DataTable<T>({
         <thead className="sticky top-0 bg-surface border-b border-border">
           <tr>
             {columns.map((col) => (
-              <th key={col.key} className="text-left px-4 py-3 font-semibold text-muted">
+              <th
+                key={col.key}
+                className="text-left px-4 py-3 font-semibold text-muted"
+              >
                 {col.header}
               </th>
             ))}
@@ -83,22 +86,31 @@ export function DataTable<T>({
                 </tr>
               ))
             : rows.map((row) => {
-                const failure = rowError?.(row)
+                const failure = rowError?.(row);
                 return (
-                  <tr key={rowKey(row)} className="border-b border-border last:border-0 hover:bg-primary-soft">
+                  <tr
+                    key={rowKey(row)}
+                    className="border-b border-border last:border-0 hover:bg-primary-soft"
+                  >
                     {columns.map((col, i) => (
                       <td key={col.key} className="px-4 py-3">
                         {i === 0 && failure ? (
-                          <span className="text-error text-helper block mb-1">{failure}</span>
+                          <span className="text-error text-helper block mb-1">
+                            {failure}
+                          </span>
                         ) : null}
-                        {col.render ? col.render(row) : String((row as Record<string, unknown>)[col.key] ?? '')}
+                        {col.render
+                          ? col.render(row)
+                          : String(
+                              (row as Record<string, unknown>)[col.key] ?? "",
+                            )}
                       </td>
                     ))}
                   </tr>
-                )
+                );
               })}
         </tbody>
       </table>
     </div>
-  )
+  );
 }

@@ -18,6 +18,8 @@ storage/
 .idea/
 .vscode/
 .mise.local.toml
+e2e/test-results/
+e2e/playwright-report/
 credentials.json
 token.json
 *.pem

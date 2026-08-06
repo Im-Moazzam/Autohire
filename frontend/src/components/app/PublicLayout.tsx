@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet } from "react-router-dom";
 
 /**
  * Bare shell for candidate-facing pages (e.g. /apply/{slug}) — no sidebar,
@@ -11,5 +11,5 @@ export function PublicLayout() {
         <Outlet />
       </div>
     </div>
-  )
+  );
 }

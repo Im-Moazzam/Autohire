@@ -1,11 +1,11 @@
-import type { HTMLAttributes, ReactNode } from 'react'
+import type { HTMLAttributes, ReactNode } from "react";
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  title?: string
-  isLoading?: boolean
-  errorText?: string
-  disabled?: boolean
-  children?: ReactNode
+  title?: string;
+  isLoading?: boolean;
+  errorText?: string;
+  disabled?: boolean;
+  children?: ReactNode;
 }
 
 export function Card({
@@ -13,17 +13,17 @@ export function Card({
   isLoading = false,
   errorText,
   disabled = false,
-  className = '',
+  className = "",
   children,
   ...rest
 }: CardProps) {
   return (
     <div
       className={[
-        'rounded-card border border-border bg-surface p-6 shadow-card',
-        disabled ? 'opacity-50' : '',
+        "rounded-card border border-border bg-surface p-6 shadow-card",
+        disabled ? "opacity-50" : "",
         className,
-      ].join(' ')}
+      ].join(" ")}
       aria-busy={isLoading}
       {...rest}
     >
@@ -37,10 +37,12 @@ export function Card({
         <p className="text-body text-error">{errorText}</p>
       ) : (
         <>
-          {title && <h3 className="text-card font-semibold text-ink mb-2">{title}</h3>}
+          {title && (
+            <h3 className="text-card font-semibold text-ink mb-2">{title}</h3>
+          )}
           {children}
         </>
       )}
     </div>
-  )
+  );
 }

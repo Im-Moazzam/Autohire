@@ -1,12 +1,12 @@
-import type { InputHTMLAttributes } from 'react'
-import { useId } from 'react'
+import type { InputHTMLAttributes } from "react";
+import { useId } from "react";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string
-  helperText?: string
-  errorText?: string
+  label: string;
+  helperText?: string;
+  errorText?: string;
   /** Async validation in flight (e.g. checking slug availability). */
-  isValidating?: boolean
+  isValidating?: boolean;
 }
 
 export function Input({
@@ -16,12 +16,12 @@ export function Input({
   isValidating = false,
   disabled,
   id,
-  className = '',
+  className = "",
   ...rest
 }: InputProps) {
-  const generatedId = useId()
-  const inputId = id ?? generatedId
-  const helperId = `${inputId}-helper`
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const helperId = `${inputId}-helper`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -35,11 +35,11 @@ export function Input({
           aria-invalid={!!errorText}
           aria-describedby={helperText || errorText ? helperId : undefined}
           className={[
-            'w-full rounded-md border px-3 py-3 text-body text-ink',
-            'disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed',
-            errorText ? 'border-error' : 'border-border',
+            "w-full rounded-md border px-3 py-3 text-body text-ink",
+            "disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed",
+            errorText ? "border-error" : "border-border",
             className,
-          ].join(' ')}
+          ].join(" ")}
           {...rest}
         />
         {isValidating && (
@@ -59,5 +59,5 @@ export function Input({
         </p>
       ) : null}
     </div>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet } from "react-router-dom";
 
 /**
  * Authenticated recruiter shell. Sidebar/PageHeader land with the first real
@@ -9,5 +9,5 @@ export function AppShell() {
     <div className="min-h-screen bg-canvas text-ink">
       <Outlet />
     </div>
-  )
+  );
 }
