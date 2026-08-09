@@ -34,7 +34,7 @@ jobs:
       - run: pip install -r backend/requirements-dev.txt
       - run: echo "TOKEN_ENCRYPTION_KEY=$(python -c 'from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())')" >> "$GITHUB_ENV"
       - run: ruff check backend
-      - run: mypy backend/app
+      - run: mypy --config-file backend/pyproject.toml backend/app
       - run: alembic upgrade head
         working-directory: backend
       - run: pytest --cov=app/services --cov-report=term-missing --cov-fail-under=70

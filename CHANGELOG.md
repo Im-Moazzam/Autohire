@@ -48,13 +48,18 @@
   has failed CI instantly regardless of code correctness, since before
   TS-00. Fixed by writing the key to `$GITHUB_ENV` from the fernet step
   instead; same bug fixed in the newly-uncommented `contract` job (TS-00)
-- `backend/requirements-dev.txt` pins `mypy==2.3.0` — unpinned mypy resolved
-  to a different version in CI than locally installed, and that newer version
-  flags `Settings()` (pydantic-settings, fields sourced from env) with a
-  spurious `call-arg` error; pinning restores the clean run (TS-00)
+- `backend/requirements-dev.txt` pins `mypy==2.3.0` for reproducible CI runs
 - `backend/pyproject.toml` mypy config: added a `celery.*` override for
   `ignore_missing_imports` — global `ignore_missing_imports` doesn't cover
   the "installed but no py.typed marker" case celery hits (TS-00)
+- CI's `mypy backend/app` ran from the repo root, where mypy's config
+  discovery never finds `backend/pyproject.toml` (it only searches cwd, not
+  the target path) — so the `pydantic.mypy` plugin, the `celery.*` override,
+  and every other mypy setting were silently not applied, surfacing a
+  spurious `call-arg` error on `Settings()` and an unsuppressed celery
+  import-untyped warning. Fixed by passing
+  `--config-file backend/pyproject.toml` explicitly; same fix applied to the
+  pre-commit mypy hook, which had the identical blind spot (TS-00)
 - CI: `e2e` job never ran `npm ci` in `e2e/` before `npx playwright test`,
   so every run failed immediately with `Cannot find module '@playwright/test'`
   regardless of the smoke test itself (TS-00)
