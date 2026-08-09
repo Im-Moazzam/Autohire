@@ -94,7 +94,10 @@ jobs:
       - run: sleep 25 && docker compose exec -T api alembic upgrade head && docker compose exec -T api python -m app.scripts.seed
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
+      - run: npm ci
+        working-directory: e2e
       - run: npx playwright install --with-deps chromium
+        working-directory: e2e
       - run: npx playwright test
         working-directory: e2e
       - uses: actions/upload-artifact@v4
