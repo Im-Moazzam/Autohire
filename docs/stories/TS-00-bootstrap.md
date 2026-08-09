@@ -1,8 +1,6 @@
 # TS-00: Bootstrap the repository
 
-- **Status:** In Progress — Backend and E2E scaffold sections done; Frontend, UI
-  primitives, and Wire-up remain (Frontend/UI primitives are in progress on a
-  separate branch; Wire-up depends on that branch landing)
+- **Status:** Done
 - **Owner:** Both, together, one sitting
 - **Points:** 3
 
@@ -74,18 +72,18 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
 
 ## Wire-up
 
-- [ ] `make api-client` runs and produces `frontend/src/lib/api.d.ts`; commit it
-- [ ] `pre-commit install`, then `pre-commit run --all-files` passes
-- [ ] Uncomment the `contract` and `e2e` jobs in `.github/workflows/ci.yml`
+- [x] `make api-client` runs and produces `frontend/src/lib/api.d.ts`; commit it
+- [x] `pre-commit install`, then `pre-commit run --all-files` passes
+- [x] Uncomment the `contract` and `e2e` jobs in `.github/workflows/ci.yml`
       (they're commented out until the scripts and `e2e/` folder they depend
       on exist — that's now)
-- [ ] Push a branch, confirm all four CI jobs go green
+- [x] Push a branch, confirm all four CI jobs go green
 
 ## Acceptance
 
-- [ ] `make up` → all six containers healthy
-- [ ] `/api/v1/health` returns 200; Swagger renders at `/docs`
-- [ ] Frontend renders; `/kitchen-sink` shows all primitives
-- [ ] Mailhog reachable at :8025
-- [ ] `make test` passes
-- [ ] CI green on a real PR
+- [x] `make up` → all six containers healthy
+- [x] `/api/v1/health` returns 200; Swagger renders at `/docs`
+- [x] Frontend renders; `/kitchen-sink` shows all primitives
+- [x] Mailhog reachable at :8025
+- [x] `make test` passes
+- [x] CI green on a real PR

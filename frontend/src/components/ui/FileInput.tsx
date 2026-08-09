@@ -1,13 +1,13 @@
-import type { InputHTMLAttributes } from 'react'
-import { useId } from 'react'
+import type { InputHTMLAttributes } from "react";
+import { useId } from "react";
 
 export interface FileInputProps
-  extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
-  label: string
-  helperText?: string
-  errorText?: string
+  extends Omit<InputHTMLAttributes<HTMLInputElement>, "type"> {
+  label: string;
+  helperText?: string;
+  errorText?: string;
   /** 0-100 while an upload is in flight. */
-  uploadProgress?: number
+  uploadProgress?: number;
 }
 
 export function FileInput({
@@ -17,13 +17,13 @@ export function FileInput({
   uploadProgress,
   disabled,
   id,
-  className = '',
+  className = "",
   ...rest
 }: FileInputProps) {
-  const generatedId = useId()
-  const inputId = id ?? generatedId
-  const helperId = `${inputId}-helper`
-  const isUploading = uploadProgress !== undefined && uploadProgress < 100
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
+  const helperId = `${inputId}-helper`;
+  const isUploading = uploadProgress !== undefined && uploadProgress < 100;
 
   return (
     <div className="flex flex-col gap-2">
@@ -37,12 +37,12 @@ export function FileInput({
         aria-invalid={!!errorText}
         aria-describedby={helperText || errorText ? helperId : undefined}
         className={[
-          'w-full rounded-md border px-3 py-3 text-body text-ink',
-          'file:mr-3 file:rounded-control file:border-0 file:bg-primary-soft file:px-3 file:py-2 file:text-primary file:font-medium',
-          'disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed',
-          errorText ? 'border-error' : 'border-border',
+          "w-full rounded-md border px-3 py-3 text-body text-ink",
+          "file:mr-3 file:rounded-control file:border-0 file:bg-primary-soft file:px-3 file:py-2 file:text-primary file:font-medium",
+          "disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed",
+          errorText ? "border-error" : "border-border",
           className,
-        ].join(' ')}
+        ].join(" ")}
         {...rest}
       />
       {isUploading && (
@@ -63,5 +63,5 @@ export function FileInput({
         </p>
       ) : null}
     </div>
-  )
+  );
 }

@@ -1,43 +1,55 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
-type Variant = 'success' | 'error' | 'warning' | 'loading'
+type Variant = "success" | "error" | "warning" | "loading";
 
 interface ToastItem {
-  id: number
-  message: string
-  variant: Variant
+  id: number;
+  message: string;
+  variant: Variant;
 }
 
 const variantClasses: Record<Variant, string> = {
-  success: 'bg-success text-white',
-  error: 'bg-error text-white',
-  warning: 'bg-warning text-white',
-  loading: 'bg-navy text-white',
-}
+  success: "bg-success text-white",
+  error: "bg-error text-white",
+  warning: "bg-warning text-white",
+  loading: "bg-navy text-white",
+};
 
 interface ToastContextValue {
-  showToast: (message: string, variant?: Variant) => void
+  showToast: (message: string, variant?: Variant) => void;
 }
 
-const ToastContext = createContext<ToastContextValue | null>(null)
+const ToastContext = createContext<ToastContextValue | null>(null);
 
 export function useToast() {
-  const ctx = useContext(ToastContext)
-  if (!ctx) throw new Error('useToast must be used within a ToastProvider')
-  return ctx
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error("useToast must be used within a ToastProvider");
+  return ctx;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<ToastItem[]>([])
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const showToast = useCallback((message: string, variant: Variant = 'success') => {
-    const id = Date.now()
-    setToasts((prev) => [...prev, { id, message, variant }])
-    if (variant !== 'loading') {
-      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000)
-    }
-  }, [])
+  const showToast = useCallback(
+    (message: string, variant: Variant = "success") => {
+      const id = Date.now();
+      setToasts((prev) => [...prev, { id, message, variant }]);
+      if (variant !== "loading") {
+        setTimeout(
+          () => setToasts((prev) => prev.filter((t) => t.id !== id)),
+          4000,
+        );
+      }
+    },
+    [],
+  );
 
   return (
     <ToastContext.Provider value={{ showToast }}>
@@ -49,11 +61,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={t.id}
               role="status"
               className={[
-                'flex items-center gap-2 rounded-control px-4 py-3 text-body shadow-modal',
+                "flex items-center gap-2 rounded-control px-4 py-3 text-body shadow-modal",
                 variantClasses[t.variant],
-              ].join(' ')}
+              ].join(" ")}
             >
-              {t.variant === 'loading' && (
+              {t.variant === "loading" && (
                 <span
                   className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
                   aria-hidden="true"
@@ -66,5 +78,5 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         document.body,
       )}
     </ToastContext.Provider>
-  )
+  );
 }

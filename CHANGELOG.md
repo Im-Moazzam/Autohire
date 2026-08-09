@@ -21,10 +21,48 @@
 - `/kitchen-sink` dev-only route rendering every primitive and its states (TS-00)
 - Vitest + React Testing Library wired up with one passing test (TS-00)
 - `frontend/Dockerfile` (node:20-alpine) (TS-00)
+- Wire-up: `docs/openapi.json` and `frontend/src/lib/api.d.ts` generated via
+  `make api-client` (first real run of this target) and committed; empty
+  `backend/app/services/` package added ahead of the first service (TS-00)
 
 ### Changed
+- `backend/Dockerfile` installs `requirements-dev.txt` (which pulls in
+  `requirements.txt`) instead of runtime-only deps, so `make test`'s
+  `docker compose exec api pytest` has pytest/ruff/mypy available in the
+  image (TS-00)
+- CI: `contract` and `e2e` jobs uncommented in `.github/workflows/ci.yml`,
+  now that the scripts and `e2e/` folder they depend on exist (TS-00)
 
 ### Fixed
+- Backend coverage gate (`--cov=app/services --cov-fail-under=70`) had no
+  `app/services` package to measure, so it always failed 0% regardless of
+  test count; added the (currently empty) package so the gate has a valid
+  target ahead of the first real service (TS-00)
+- `.prettierignore` added for `frontend/src/lib/api.d.ts` — prettier was
+  reformatting the openapi-typescript output on every commit, which would
+  have made the `contract` CI job's raw diff fail on every future
+  `make api-client` regenerate (TS-00)
+- CI: `backend` job's `TOKEN_ENCRYPTION_KEY: ${{ steps.fernet.outputs.key }}`
+  was set in job-level `env:`, which GitHub Actions evaluates before any
+  step runs — `steps.*` isn't valid there, so every push touching this repo
+  has failed CI instantly regardless of code correctness, since before
+  TS-00. Fixed by writing the key to `$GITHUB_ENV` from the fernet step
+  instead; same bug fixed in the newly-uncommented `contract` job (TS-00)
+- `backend/requirements-dev.txt` pins `mypy==2.3.0` for reproducible CI runs
+- `backend/pyproject.toml` mypy config: added a `celery.*` override for
+  `ignore_missing_imports` — global `ignore_missing_imports` doesn't cover
+  the "installed but no py.typed marker" case celery hits (TS-00)
+- CI's `mypy backend/app` ran from the repo root, where mypy's config
+  discovery never finds `backend/pyproject.toml` (it only searches cwd, not
+  the target path) — so the `pydantic.mypy` plugin, the `celery.*` override,
+  and every other mypy setting were silently not applied, surfacing a
+  spurious `call-arg` error on `Settings()` and an unsuppressed celery
+  import-untyped warning. Fixed by passing
+  `--config-file backend/pyproject.toml` explicitly; same fix applied to the
+  pre-commit mypy hook, which had the identical blind spot (TS-00)
+- CI: `e2e` job never ran `npm ci` in `e2e/` before `npx playwright test`,
+  so every run failed immediately with `Cannot find module '@playwright/test'`
+  regardless of the smoke test itself (TS-00)
 - CI: `contract`/`e2e` jobs were live despite a comment saying they were disabled
   pending TS-00; actually commented out, with their two latent env bugs fixed so
   they work once uncommented (TS-00)

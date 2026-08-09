@@ -1,10 +1,11 @@
-import type { TextareaHTMLAttributes } from 'react'
-import { useId } from 'react'
+import type { TextareaHTMLAttributes } from "react";
+import { useId } from "react";
 
-export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
-  label: string
-  helperText?: string
-  errorText?: string
+export interface TextareaProps
+  extends TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label: string;
+  helperText?: string;
+  errorText?: string;
 }
 
 export function Textarea({
@@ -13,12 +14,12 @@ export function Textarea({
   errorText,
   disabled,
   id,
-  className = '',
+  className = "",
   ...rest
 }: TextareaProps) {
-  const generatedId = useId()
-  const textareaId = id ?? generatedId
-  const helperId = `${textareaId}-helper`
+  const generatedId = useId();
+  const textareaId = id ?? generatedId;
+  const helperId = `${textareaId}-helper`;
 
   return (
     <div className="flex flex-col gap-2">
@@ -32,11 +33,11 @@ export function Textarea({
         aria-describedby={helperText || errorText ? helperId : undefined}
         rows={4}
         className={[
-          'w-full rounded-md border px-3 py-3 text-body text-ink',
-          'disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed',
-          errorText ? 'border-error' : 'border-border',
+          "w-full rounded-md border px-3 py-3 text-body text-ink",
+          "disabled:bg-canvas disabled:text-muted disabled:cursor-not-allowed",
+          errorText ? "border-error" : "border-border",
           className,
-        ].join(' ')}
+        ].join(" ")}
         {...rest}
       />
       {errorText ? (
@@ -49,5 +50,5 @@ export function Textarea({
         </p>
       ) : null}
     </div>
-  )
+  );
 }

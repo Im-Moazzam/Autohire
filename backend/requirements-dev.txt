@@ -5,5 +5,5 @@ pytest-html
 httpx
 factory-boy
 ruff
-mypy
+mypy==2.3.0
 pylint

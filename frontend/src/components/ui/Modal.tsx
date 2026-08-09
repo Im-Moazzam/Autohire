@@ -1,15 +1,15 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { Button } from './Button'
+import { useEffect, useRef, type ReactNode } from "react";
+import { Button } from "./Button";
 
 export interface ModalProps {
-  open: boolean
-  title: string
-  onClose: () => void
-  children?: ReactNode
-  primaryLabel?: string
-  onPrimary?: () => void
-  isLoading?: boolean
-  errorText?: string
+  open: boolean;
+  title: string;
+  onClose: () => void;
+  children?: ReactNode;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+  isLoading?: boolean;
+  errorText?: string;
 }
 
 export function Modal({
@@ -22,14 +22,14 @@ export function Modal({
   isLoading = false,
   errorText,
 }: ModalProps) {
-  const ref = useRef<HTMLDialogElement>(null)
+  const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    const dialog = ref.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
 
   return (
     <dialog
@@ -54,5 +54,5 @@ export function Modal({
         </div>
       </div>
     </dialog>
-  )
+  );
 }
