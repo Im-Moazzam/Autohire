@@ -1,6 +1,6 @@
 # TS-00: Bootstrap the repository
 
-- **Status:** In Progress — Wire-up complete locally; pending CI green on PR
+- **Status:** Done
 - **Owner:** Both, together, one sitting
 - **Points:** 3
 
@@ -77,7 +77,7 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
 - [x] Uncomment the `contract` and `e2e` jobs in `.github/workflows/ci.yml`
       (they're commented out until the scripts and `e2e/` folder they depend
       on exist — that's now)
-- [ ] Push a branch, confirm all four CI jobs go green
+- [x] Push a branch, confirm all four CI jobs go green
 
 ## Acceptance
 
@@ -86,4 +86,4 @@ Each needs its loading/disabled/error states from the start (`docs/checklists/ux
 - [x] Frontend renders; `/kitchen-sink` shows all primitives
 - [x] Mailhog reachable at :8025
 - [x] `make test` passes
-- [ ] CI green on a real PR
+- [x] CI green on a real PR
