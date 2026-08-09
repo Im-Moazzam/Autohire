@@ -51,13 +51,18 @@ see ADR-002. Note them in the SDS revision history.
 | full_name | VARCHAR(150) | NOT NULL |
 | profile_picture_url | TEXT | NULL |
 | google_access_token | TEXT | NOT NULL, **encrypted at rest** |
-| google_refresh_token | TEXT | NOT NULL, **encrypted at rest** |
+| google_refresh_token | TEXT | **NULL**, encrypted at rest when present |
+| google_token_expires_at | TIMESTAMPTZ | NOT NULL |
 | granted_scopes | JSONB | NOT NULL |
 | account_state | recruiter_state_enum | NOT NULL, DEFAULT 'ACTIVE' |
 | created_at | TIMESTAMPTZ | NOT NULL |
 | last_login_at | TIMESTAMPTZ | NULL |
 
 Tokens encrypted with a Fernet key from `TOKEN_ENCRYPTION_KEY`. Never log them.
+`google_refresh_token` is nullable because Google only reissues a refresh token on
+some re-consents — on update, a missing one means "keep the existing token," not
+"the recruiter has none." `google_token_expires_at` is an addition to the submitted
+ERD (US-01); see `docs/drift.md`.
 
 ### scheduling_preferences (1:1 -> recruiters)
 | Column | Type | Notes |

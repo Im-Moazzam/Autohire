@@ -4,7 +4,10 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]  # ruff-format handles line length
+ignore = [
+    "E501",  # ruff-format handles line length
+    "B008",  # FastAPI's Depends()/Query()/Cookie() in defaults is the documented pattern
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

@@ -3,6 +3,21 @@
 ## [Unreleased]
 
 ### Added
+- US-01: Google OAuth sign-up. `recruiters` table + migration (`account_state`
+  enum `ACTIVE`/`SUSPENDED`/`REAUTH_REQUIRED`, `google_token_expires_at`,
+  nullable `google_refresh_token`); `app/adapters/google/oauth.py` (httpx-only,
+  no vendor SDK) for the authorize URL, code exchange, and userinfo lookup;
+  `app/services/auth_service.py` for browser-bound state (signed nonce + cookie,
+  not signed-state-alone, to close a login-CSRF hole), the signed session
+  cookie, and recruiter upsert with a granted-vs-required scope check that sets
+  `REAUTH_REQUIRED` on partial consent; `GET /api/v1/auth/google/login`,
+  `GET /api/v1/auth/google/callback`, `GET /api/v1/auth/me`; Fernet
+  encrypt/decrypt helper in `app/core/crypto.py`; CORS middleware in `main.py`
+  (cookie auth needs `allow_credentials` + an explicit frontend origin, which
+  didn't exist yet); 9 tests covering all 5 story test cases plus the
+  partial-scope case and a token-leak assertion
+- `backend/requirements.txt`: `httpx` (Google OAuth HTTP calls), `cryptography`
+  (Fernet), `itsdangerous` (signed state + session cookie)
 - Repository scaffold: CLAUDE.md, docs, ADR-001/002/003, Docker stack, design tokens
 - `backend/pyproject.toml` — ruff/mypy config, ahead of TS-00 so pre-commit has
   something to run against from the first commit of app code
@@ -26,6 +41,11 @@
   `backend/app/services/` package added ahead of the first service (TS-00)
 
 ### Changed
+- `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
+  `make api-client` for the three new auth routes (US-01)
+- `backend/pyproject.toml`: ruff ignores `B008` — FastAPI's `Depends()`/`Query()`/
+  `Cookie()`-in-default-argument pattern is documented and correct, not the bug
+  the rule assumes
 - `backend/Dockerfile` installs `requirements-dev.txt` (which pulls in
   `requirements.txt`) instead of runtime-only deps, so `make test`'s
   `docker compose exec api pytest` has pytest/ruff/mypy available in the
