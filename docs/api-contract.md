@@ -22,7 +22,10 @@ and explicit error codes.
   No unbounded lists. Ever. (Defect #7 in your log was exactly this.)
 - **State changes**: `PATCH` on the resource with the new state in the body.
   Sub-resource action endpoints only where a state change isn't the point (e.g. `/retry`).
-- Auth: `Authorization: Bearer <app_jwt>`. The JWT is ours; Google tokens never reach the client.
+- Auth: signed, HTTP-only, SameSite=Lax session cookie (`itsdangerous`, keyed on
+  `SECRET_KEY`) — not a Bearer JWT. Single server, single frontend origin, no
+  third-party API consumers, so a JWT bought nothing but refresh/revocation
+  complexity. Decided in US-01; Google tokens never reach the client either way.
 - Errors: `{"code": "MACHINE_CODE", "message": "human readable", "details": {...}}`
 - Timestamps: ISO 8601 UTC.
 
@@ -34,9 +37,9 @@ Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTIN
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/auth/google/login` | -> redirect to Google consent |
-| GET | `/auth/google/callback` | code exchange, upsert recruiter, issue app JWT |
-| POST | `/auth/refresh` | rotate app JWT |
-| POST | `/auth/logout` | invalidate session |
+| GET | `/auth/google/callback` | code exchange, upsert recruiter, set session cookie |
+| POST | `/auth/refresh` | not needed with cookie sessions (US-01); drop or repurpose in US-02 |
+| POST | `/auth/logout` | invalidate session — US-02 |
 | GET | `/auth/me` | profile + `granted_scopes` + `account_state` |
 | POST | `/auth/google/reconnect` | US-03 — re-consent, replace stored tokens |
 

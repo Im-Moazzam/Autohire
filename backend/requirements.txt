@@ -8,3 +8,6 @@ pydantic-settings
 celery
 redis
 python-multipart
+httpx
+cryptography
+itsdangerous
