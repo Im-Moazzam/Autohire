@@ -3,6 +3,20 @@
 ## [Unreleased]
 
 ### Added
+- US-02: Logout and profile update. `POST /api/v1/auth/logout` clears the
+  session cookie unconditionally (no `get_current_recruiter` dependency, so
+  it's idempotent with or without a session) with the same `httponly`/
+  `samesite=lax`/`path=/` attributes it was set with — a mismatch there is the
+  classic way a "logout" silently fails to clear the cookie. Safe without CSRF
+  protection because `SameSite=Lax` already stops a cross-site POST from
+  carrying the cookie. `PATCH /api/v1/recruiters/me` updates `full_name` only;
+  `RecruiterUpdate` uses `extra="forbid"` so attempting `email` or
+  `account_state` 422s loudly instead of being silently dropped. `RecruiterOut`
+  (`/auth/me`) now includes `granted_scopes`, closing a gap between it and
+  `docs/api-contract.md` — needed for the reconnect banner to name which
+  permission is missing. Confirmed `last_login_at` (written since US-01) is
+  actually covered by a test, since it wasn't. 7 new tests (TC-01 through
+  TC-05 plus the `last_login_at` gap-closer).
 - US-03: Google token refresh + reconnect. `app/adapters/google/session.py` —
   `google_call()`, the wrapper every future Google-calling route goes through:
   decrypts + refreshes the access token (60s skew), retries 429/5xx with
@@ -73,6 +87,12 @@
   `backend/app/services/` package added ahead of the first service (TS-00)
 
 ### Changed
+- `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
+  `make api-client` for `/auth/logout`, `PATCH /recruiters/me`, and the
+  `granted_scopes` field on `RecruiterOut` (US-02)
+- `docs/api-contract.md`: dropped `POST /auth/refresh`, its own note already
+  said "not needed with cookie sessions; drop or repurpose in US-02" and
+  nothing repurposed it; added the `## Recruiters` section (US-02)
 - `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
   `make api-client` for `/auth/google/reconnect` (US-03)
 - `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via

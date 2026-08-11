@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -87,3 +87,14 @@ def google_callback(
 @router.get("/me", response_model=RecruiterOut)
 def get_me(recruiter: Recruiter = Depends(get_current_recruiter)) -> Recruiter:
     return recruiter
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout() -> Response:
+    """No get_current_recruiter dependency, deliberately — logout must be
+    idempotent with no session (AC-02), not 401. Safe without CSRF protection
+    because the session cookie is SameSite=Lax: a cross-site POST doesn't carry
+    it, so an attacker can't trigger this against a logged-in victim."""
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(SESSION_COOKIE, httponly=True, samesite="lax", secure=_COOKIE_SECURE)
+    return response

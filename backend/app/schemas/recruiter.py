@@ -12,3 +12,10 @@ class RecruiterOut(BaseModel):
     email: str
     name: str = Field(validation_alias="full_name")
     account_state: RecruiterState
+    granted_scopes: list[str]
+
+
+class RecruiterUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str

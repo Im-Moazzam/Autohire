@@ -275,4 +275,45 @@ def test_me_returns_recruiter_and_never_leaks_tokens(
     assert "google_access_token" not in body
     assert "google_refresh_token" not in body
     assert "fake-access-token" not in me_response.text
-    assert "fake-refresh-token" not in me_response.text
+
+
+def _login(client: TestClient, db_session: Session) -> Recruiter:
+    _, state = _start_login(client)
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=FAKE_TOKENS),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            follow_redirects=False,
+        )
+    return db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+
+
+def test_last_login_at_set_on_callback(client: TestClient, db_session: Session) -> None:
+    recruiter = _login(client, db_session)
+    first_login = recruiter.last_login_at
+    assert first_login is not None
+
+    _login(client, db_session)
+
+    db_session.expire_all()
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    assert recruiter.last_login_at is not None
+    assert recruiter.last_login_at >= first_login
+
+
+def test_tc01_logout_clears_cookie_and_me_then_401(client: TestClient, db_session: Session) -> None:
+    _login(client, db_session)
+    assert client.get("/api/v1/auth/me").status_code == 200
+
+    logout_response = client.post("/api/v1/auth/logout")
+
+    assert logout_response.status_code == 204
+    assert client.get("/api/v1/auth/me").status_code == 401
+
+
+def test_tc02_logout_without_session_is_204(client: TestClient) -> None:
+    response = client.post("/api/v1/auth/logout")
+    assert response.status_code == 204

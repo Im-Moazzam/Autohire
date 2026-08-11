@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes.auth import router as auth_router
+from app.api.routes.recruiters import router as recruiters_router
 from app.core.config import settings
 from app.core.exceptions import ReauthRequired
 
@@ -34,4 +35,5 @@ def health() -> dict[str, str]:
 
 
 api_router.include_router(auth_router)
+api_router.include_router(recruiters_router)
 app.include_router(api_router)

@@ -38,10 +38,14 @@ Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTIN
 |---|---|---|
 | GET | `/auth/google/login` | -> redirect to Google consent |
 | GET | `/auth/google/callback` | code exchange, upsert recruiter, set session cookie |
-| POST | `/auth/refresh` | not needed with cookie sessions (US-01); drop or repurpose in US-02 |
-| POST | `/auth/logout` | invalidate session — US-02 |
+| POST | `/auth/logout` | clears the session cookie unconditionally; 204 with or without a session (idempotent) |
 | GET | `/auth/me` | profile + `granted_scopes` + `account_state` |
 | GET | `/auth/google/reconnect` | US-03 — restarts consent (must redirect the browser, so GET not POST); callback replaces stored tokens |
+
+## Recruiters
+| Method | Path | Notes |
+|---|---|---|
+| PATCH | `/recruiters/me` | `{full_name}` only — `extra="forbid"`, any other field 422s rather than being silently dropped |
 
 ## Templates
 | Method | Path | Notes |
