@@ -3,6 +3,30 @@
 ## [Unreleased]
 
 ### Added
+- US-03: Google token refresh + reconnect. `app/adapters/google/session.py` —
+  `google_call()`, the wrapper every future Google-calling route goes through:
+  decrypts + refreshes the access token (60s skew), retries 429/5xx with
+  exponential backoff and 401 with a forced refresh sharing one 3-attempt
+  budget (not a bonus retry on top of it), raises `ReauthRequired` on
+  `invalid_grant` after flipping `account_state`, and writes exactly one
+  `api_usage_logs` row per call with `call_count` = attempts made. Token
+  persistence and usage logging each use their own short-lived DB session,
+  never the caller's, so a route mid-transaction can't have this partial work
+  rolled back with it. `app/core/exceptions.py` (`ReauthRequired`) and one
+  `@app.exception_handler` in `main.py` convert it to 409
+  `{"code": "REAUTH_REQUIRED"}` — no per-route try/except. `api_usage_logs`
+  table + `api_name_enum` migration (`GOOGLE_DRIVE`/`GOOGLE_GMAIL`/
+  `GOOGLE_CALENDAR`/`OPENAI` — `PINECONE` omitted, see `docs/drift.md` #16).
+  `GET /api/v1/auth/google/reconnect` restarts consent for the logged-in
+  recruiter, reusing US-01's browser-bound CSRF state cookie; the existing
+  `/google/callback` + `upsert_recruiter` already replace tokens and retain
+  the existing refresh token when Google omits a new one. 18 new tests
+  (TC-01 through TC-09, the unified-retry-budget and pre-check cases, plus
+  two covering caller-supplied headers and refresh-avoidance on reuse).
+  Also verified end-to-end against real Google on 2026-08-11 (forced token
+  expiry, forced `invalid_grant` via revoking access at
+  myaccount.google.com/permissions, and a live reconnect) via a throwaway
+  scratch script, deleted after use — see `docs/stories/US-03.md`.
 - US-01: `frontend/src/pages/Dashboard.tsx` and `AuthError.tsx` — placeholder
   redirect targets for the OAuth callback's success/failure paths, wired into
   `router.tsx`. Added to unblock manual end-to-end verification against real
@@ -50,7 +74,12 @@
 
 ### Changed
 - `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
+  `make api-client` for `/auth/google/reconnect` (US-03)
+- `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
   `make api-client` for the three new auth routes (US-01)
+- `docs/schema.md`: `api_name_enum` drops `PINECONE` (US-03, drift #16)
+- `docs/api-contract.md`: `/auth/google/reconnect` corrected to GET — it has
+  to redirect a browser into Google's consent screen (US-03, drift #17)
 - `backend/pyproject.toml`: ruff ignores `B008` — FastAPI's `Depends()`/`Query()`/
   `Cookie()`-in-default-argument pattern is documented and correct, not the bug
   the rule assumes

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.db import SessionLocal
 from app.main import app
+from app.models.api_usage_log import ApiUsageLog
 from app.models.recruiter import Recruiter
 
 
@@ -14,6 +15,7 @@ from app.models.recruiter import Recruiter
 def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
+    session.query(ApiUsageLog).delete()
     session.query(Recruiter).delete()
     session.commit()
     session.close()

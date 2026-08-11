@@ -23,8 +23,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _COOKIE_SECURE = settings.app_env != "local"
 
 
-@router.get("/google/login")
-def google_login() -> RedirectResponse:
+def _redirect_to_google_consent() -> RedirectResponse:
     nonce, signed_state = generate_state()
     response = RedirectResponse(url=build_auth_url(signed_state), status_code=307)
     response.set_cookie(
@@ -36,6 +35,20 @@ def google_login() -> RedirectResponse:
         secure=_COOKIE_SECURE,
     )
     return response
+
+
+@router.get("/google/login")
+def google_login() -> RedirectResponse:
+    return _redirect_to_google_consent()
+
+
+@router.get("/google/reconnect")
+def google_reconnect(recruiter: Recruiter = Depends(get_current_recruiter)) -> RedirectResponse:
+    """Restart consent for the logged-in recruiter. Reuses the same state-binding
+    CSRF cookie as /google/login; the existing /google/callback + upsert_recruiter
+    already replace the stored tokens and flip account_state back to ACTIVE
+    (retaining the existing refresh token if Google omits a new one)."""
+    return _redirect_to_google_consent()
 
 
 @router.get("/google/callback")
