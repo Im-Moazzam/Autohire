@@ -95,6 +95,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description No get_current_recruiter dependency, deliberately — logout must be
+         *     idempotent with no session (AC-02), not 401. Safe without CSRF protection
+         *     because the session cookie is SameSite=Lax: a cross-site POST doesn't carry
+         *     it, so an attacker can't trigger this against a logged-in victim.
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recruiters/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Me */
+        patch: operations["update_me_api_v1_recruiters_me_patch"];
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -116,12 +156,19 @@ export interface components {
             /** Name */
             name: string;
             account_state: components["schemas"]["RecruiterState"];
+            /** Granted Scopes */
+            granted_scopes: string[];
         };
         /**
          * RecruiterState
          * @enum {string}
          */
         RecruiterState: "ACTIVE" | "SUSPENDED" | "REAUTH_REQUIRED";
+        /** RecruiterUpdate */
+        RecruiterUpdate: {
+            /** Full Name */
+            full_name: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -262,6 +309,59 @@ export interface operations {
             };
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecruiterOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_me_api_v1_recruiters_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                autohire_session?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecruiterUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
