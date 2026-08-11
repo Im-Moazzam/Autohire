@@ -4,3 +4,75 @@ node = "20"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
+
+[tasks.setup]
+description = "One-time: toolchain + hooks + deps"
+run = ["mise install", "pip install pre-commit && pre-commit install", "cd frontend && npm install"]
+
+[tasks.up]
+description = "Build and start the docker stack"
+run = "docker compose up -d --build"
+
+[tasks.down]
+description = "Stop the docker stack"
+run = "docker compose down"
+
+[tasks."restart:api"]
+description = "Restart the api container (e.g. after editing .env)"
+run = "docker compose restart api"
+
+[tasks.logs]
+description = "Tail api + worker logs"
+run = "docker compose logs -f api worker"
+
+[tasks."db:migrate"]
+description = "Apply Alembic migrations"
+run = "docker compose exec api alembic upgrade head"
+
+[tasks."db:revision"]
+description = "Create an Alembic revision. Usage: mise run db:revision -- \"add apply_slug\""
+run = "docker compose exec api alembic revision --autogenerate -m \"{{arg(name='m')}}\""
+
+[tasks."db:seed"]
+description = "Seed the database"
+run = "docker compose exec api python -m app.scripts.seed"
+
+[tasks.test]
+description = "Run backend + frontend test suites"
+run = ["docker compose exec api pytest -q --cov=app/services --cov-fail-under=70", "cd frontend && npm run test -- --run"]
+
+[tasks.e2e]
+description = "Run Playwright e2e tests"
+run = "cd e2e && npx playwright test"
+
+[tasks.lint]
+description = "Run pre-commit on all files"
+run = "pre-commit run --all-files"
+
+[tasks."api-client"]
+description = "Regenerate the typed frontend client from the live API"
+run = ["docker compose exec -T api python -m app.scripts.dump_openapi > docs/openapi.json", "npx openapi-typescript docs/openapi.json -o frontend/src/lib/api.d.ts"]
+
+[tasks."docs:api"]
+description = "Regenerate OpenAPI spec"
+run = ["mkdir -p docs/generated", "docker compose exec -T api python -m app.scripts.dump_openapi > docs/generated/openapi.json"]
+
+[tasks."docs:erd"]
+description = "Regenerate ERD from the live database"
+run = ["mkdir -p docs/generated", "docker compose exec -T api python -m app.scripts.dump_erd > docs/generated/erd.puml"]
+
+[tasks."docs:uml"]
+description = "Regenerate class diagram from models and services"
+run = ["mkdir -p docs/generated", "docker compose exec -T api pyreverse -o puml -p AutoHire app/models app/services -d /app/../docs/generated"]
+
+[tasks."docs:tests"]
+description = "Regenerate test + coverage report"
+run = ["mkdir -p docs/generated", "docker compose exec api pytest --html=/app/../docs/generated/test-report.html --self-contained-html --cov=app --cov-report=html:/app/../docs/generated/coverage"]
+
+[tasks.docs]
+description = "Regenerate all report artifacts"
+depends = ["docs:api", "docs:erd", "docs:uml", "docs:tests"]
+
+[tasks.reset]
+description = "Wipe volumes, rebuild, migrate, seed"
+run = ["docker compose down -v", "docker compose up -d --build", "sleep 8", "mise run db:migrate", "mise run db:seed"]
