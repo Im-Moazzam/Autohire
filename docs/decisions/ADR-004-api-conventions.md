@@ -66,6 +66,26 @@ enumeration attempt. This overrides the `TENANT_FORBIDDEN` 403 entry in
 `api-contract.md`; `TENANT_FORBIDDEN` is retained only for cases where ownership is
 already established but the action itself is not permitted.
 
+**P9. Error codes are carried through `HTTPException.detail` as a dict, not a custom
+exception subclass.** Every route that needs a specific `code` raises
+`HTTPException(status_code=..., detail={"code": "X", "message": "...", "details": {...}})`.
+One global handler (registered on `starlette.exceptions.HTTPException`, so it also
+catches routing-level 404/405s that FastAPI raises directly, not just
+`fastapi.HTTPException`) reads that dict and emits `ErrorOut`; a route that raises with
+a bare string `detail` gets a generic code derived from the status instead of a route
+having to import and raise a bespoke exception class per error. `RequestValidationError`
+(422, `extra="forbid"` and body validation) is handled separately — FastAPI raises it
+before any route body runs, so it needs its own handler, `code="VALIDATION_ERROR"`,
+with the per-field Pydantic errors preserved under `details` rather than flattened, so
+the frontend can mark individual inputs invalid.
+
+**P10. `apply_url` is `f"{PUBLIC_APPLY_BASE_URL}/{apply_slug}"`, not
+`f"{PUBLIC_APPLY_BASE_URL}/apply/{apply_slug}"`.** `PUBLIC_APPLY_BASE_URL`
+(`http://localhost:5173/apply` in `.env.example`) already embeds the SPA's `/apply`
+route segment — the variable name doesn't make that obvious, and TS-02's first draft
+got this wrong by assuming the base URL was origin-only. Any future code deriving this
+URL uses the same formula; do not re-append `/apply`.
+
 ## Consequences
 
 - `docs/api-contract.md` is rewritten to match (see accompanying commit).

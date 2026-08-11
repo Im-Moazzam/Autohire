@@ -54,7 +54,10 @@ these. Summary:
 
 Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTING` (409),
 `DUPLICATE_SUBMISSION` (409), `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413),
-`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409).
+`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409),
+`TEMPLATE_IN_USE` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9).
+Per-resource `{RESOURCE}_NOT_FOUND` codes (`JOB_NOT_FOUND`, `CANDIDATE_NOT_FOUND`, etc.)
+follow the obvious pattern and aren't enumerated individually.
 
 ## Auth
 | Method | Path | Notes |
@@ -111,8 +114,8 @@ ambiguous.
 ## Public — no auth
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/public/apply/{slug}` | job title, JD, field definitions. 410 if expired |
-| POST | `/api/v1/public/apply/{slug}` | multipart. Rate-limited by IP |
+| GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. 410 if expired |
+| POST | `/api/v1/public/apply/{apply_slug}` | multipart. Rate-limited by IP |
 
 The only two unauthenticated endpoints in the system, mounted as a separate
 `APIRouter` under `/api/v1/public/*` (P1) so rate limiting and "no auth dependency
@@ -128,7 +131,7 @@ when wiring frontend links.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/jobs/{id}/candidates` | raw submissions, `Page[CandidateOut]`, dynamic columns; `?submission_status=` |
-| GET | `/jobs/{id}/candidates/ranked` | `Page[RankedCandidateOut]`; `?sort=score&min_score=&skill=` |
+| GET | `/jobs/{id}/candidates/ranked` | `Page[RankedCandidateOut]`, sorted by `rank_position`; `?min_score=&skill=` |
 | GET | `/candidates/{id}` | profile + responses + AI result + resume URL |
 | GET | `/candidates/{id}/evidence` | Phase 2 (US-23) — out of scope |
 | GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8) |
@@ -156,8 +159,8 @@ time. That is TR-05 and defect #4 in one line of policy.
 ## Email
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/emails/send` | `{type, candidate_ids[], subject?, body?}` — async (P4), 202 `TaskOut` |
-| GET | `/emails` | `Page[EmailLogOut]`, cross-job history; `?job_id=&candidate_id=&type=` (P2) |
+| POST | `/emails/send` | `{email_type, candidate_ids[], subject?, body?}` — async (P4), 202 `TaskOut` |
+| GET | `/emails` | `Page[EmailLogOut]`, cross-job history; `?job_id=&candidate_id=&email_type=` (P2) |
 | GET | `/emails/replies` | Phase 2 — out of scope |
 | POST | `/emails/replies/{id}/resolve` | Phase 2 — out of scope |
 

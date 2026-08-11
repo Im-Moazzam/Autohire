@@ -121,6 +121,7 @@ def test_tc03_reauth_required_route_returns_409(client: TestClient, db_session: 
     assert response.json() == {
         "code": "REAUTH_REQUIRED",
         "message": "Google authorization has expired.",
+        "details": None,
     }
 
 
