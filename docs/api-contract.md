@@ -13,25 +13,48 @@ This file exists to fix conventions before the first route is written.
 
 The endpoint list below is derived from SDS Phase II §6, with four corrections applied:
 a version prefix, pagination on all list endpoints, one consistent verb convention,
-and explicit error codes.
+and explicit error codes. Conventions below are settled in `docs/decisions/ADR-004`
+— reopen there, not here.
 
 ## Conventions
 
-- Base path `/api/v1`. Everything.
-- **List endpoints**: `?page=1&size=20` -> `{"items": [...], "total": n, "page": 1, "size": 20}`.
-  No unbounded lists. Ever. (Defect #7 in your log was exactly this.)
-- **State changes**: `PATCH` on the resource with the new state in the body.
-  Sub-resource action endpoints only where a state change isn't the point (e.g. `/retry`).
+See `docs/decisions/ADR-004-api-conventions.md` for the reasoning behind each of
+these. Summary:
+
+- Base path `/api/v1`. Everything. Unauthenticated routes live under
+  `/api/v1/public/*` as a separate router (P1).
+- **Resources are top-level; relationships are query filters**, except where a child
+  cannot exist outside its parent and is never queried across parents (P2).
+- **List endpoints** (persisted collections): `?page=1&size=20` ->
+  `{"items": [...], "total": n, "page": 1, "size": 20}`. No unbounded lists. Ever.
+  (Defect #7 in your log was exactly this.) **Exception**: computed or inherently
+  bounded results (e.g. available interview slots) return a bare list — pagination is
+  a property of storage, not of every array (P5). Singleton resources are never
+  paginated (P6).
+- **State changes**: `PATCH` on the resource with the new state in the body. Illegal
+  transitions return 409 `INVALID_STATE_TRANSITION`. Sub-resource action endpoints
+  exist only for batch/async operations that aren't a state change on one addressable
+  resource (P3).
+- **Batch/async operations** (job processing, interview scheduling, email dispatch)
+  return `TaskOut` with 202 and are polled at `GET /tasks/{task_id}` (P4).
+- **Singletons** (`/auth/me`, `/recruiters/me`, `/scheduling/preferences`): `PATCH`
+  for partial updates of flat resources, `PUT` for aggregate roots owning an ordered
+  child collection (P6).
 - Auth: signed, HTTP-only, SameSite=Lax session cookie (`itsdangerous`, keyed on
   `SECRET_KEY`) — not a Bearer JWT. Single server, single frontend origin, no
   third-party API consumers, so a JWT bought nothing but refresh/revocation
   complexity. Decided in US-01; Google tokens never reach the client either way.
-- Errors: `{"code": "MACHINE_CODE", "message": "human readable", "details": {...}}`
+- Errors: `{"code": "MACHINE_CODE", "message": "human readable", "details": {...}}`,
+  declared in OpenAPI via `responses={}` so it reaches the generated client. A global
+  `HTTPException` handler reshapes FastAPI's default `{"detail": ...}` into this (P7).
+- **Cross-tenant access**: a resource belonging to another recruiter returns 404, not
+  403 — a 403 confirms the resource exists (P8). `TENANT_FORBIDDEN` is retained only
+  for cases where ownership is already established but the action isn't permitted.
 - Timestamps: ISO 8601 UTC.
 
 Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTING` (409),
 `DUPLICATE_SUBMISSION` (409), `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413),
-`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403).
+`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409).
 
 ## Auth
 | Method | Path | Notes |
@@ -53,9 +76,15 @@ Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTIN
 | GET | `/templates` | paginated |
 | POST | `/templates` | name + ordered fields; >=1 field required |
 | GET | `/templates/{id}` | with fields |
-| PUT | `/templates/{id}` | replaces field set wholesale |
-| POST | `/templates/{id}/duplicate` | US-05 |
+| PUT | `/templates/{id}` | aggregate root owning an ordered field collection (P6) |
+| POST | `/templates/{id}/duplicate` | Phase 2 (US-05) — out of scope |
 | DELETE | `/templates/{id}` | soft delete; 409 if used by a LIVE job |
+
+`TemplateFieldIn.field_id` is optional: present means keep the existing field row,
+absent means create a new one. This matters because `candidate_form_responses.field_id`
+is a foreign key — deleting and recreating fields on every save would cascade away
+already-submitted responses. `PUT` reconciles the field set by `field_id` rather than
+replacing rows wholesale.
 
 ## Jobs
 | Method | Path | Notes |
@@ -63,37 +92,62 @@ Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTIN
 | GET | `/jobs` | paginated; `?status=LIVE&q=` |
 | POST | `/jobs` | JD + template + TTL -> creates Drive folder, `apply_slug`, JD embedding |
 | GET | `/jobs/{id}` | detail + counts |
-| PATCH | `/jobs/{id}` | JD edit, TTL extend/revoke, `is_accepting_responses` |
-| DELETE | `/jobs/{id}` | soft delete, requires confirm flag |
-| POST | `/jobs/{id}/process` | 409 unless status=CLOSED and candidates exist |
+| PATCH | `/jobs/{id}` | JD edit, TTL extend/revoke, `is_accepting_responses`, `status` |
+| DELETE | `/jobs/{id}` | Phase 2 (US-09/US-10) — out of scope; US-06 explicitly excludes edit/TTL-extend/delete from Phase 1 |
+| POST | `/jobs/{id}/process` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED and candidates exist |
+
+**No close action endpoint.** Closing a job is `PATCH /jobs/{id}` with
+`{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a
+batch/async operation. Legal transition graph: `DRAFT -> LIVE -> CLOSED -> PROCESSED`.
+Any other transition, including skipping a state, is 409 `INVALID_STATE_TRANSITION`.
+
+`status` is lifecycle; `is_accepting_responses` is a pause/resume toggle *within*
+`LIVE` — a recruiter can pause and resume intake without leaving the LIVE state or
+losing the `expires_at` countdown. Applications are accepted iff
+`status == LIVE AND is_accepting_responses AND now < expires_at`. All three
+conditions gate `POST /public/apply/{slug}`; `docs/schema.md` previously left this
+ambiguous.
 
 ## Public — no auth
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/public/apply/{slug}` | job title, JD, field definitions. 410 if expired |
-| POST | `/public/apply/{slug}` | multipart. Rate-limited by IP |
+| GET | `/api/v1/public/apply/{slug}` | job title, JD, field definitions. 410 if expired |
+| POST | `/api/v1/public/apply/{slug}` | multipart. Rate-limited by IP |
 
-The only two unauthenticated endpoints in the system. Rate limit them, validate
-file type by magic bytes not extension, cap size at 5MB.
+The only two unauthenticated endpoints in the system, mounted as a separate
+`APIRouter` under `/api/v1/public/*` (P1) so rate limiting and "no auth dependency
+here" are enforced at the router level. Rate limit them, validate file type by magic
+bytes not extension, cap size at 5MB.
+
+**Not the same URL as the SPA route.** Candidates visit `/apply/{slug}` in the
+browser — that's the React app route (ADR-001), not an API endpoint. `JobOut.apply_url`
+is the SPA URL (`/apply/{slug}`), never the API path above. Don't conflate the two
+when wiring frontend links.
 
 ## Candidates
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/jobs/{id}/candidates` | raw submissions, paginated, dynamic columns |
-| GET | `/jobs/{id}/candidates/ranked` | `?sort=score&min_score=&skill=` |
+| GET | `/jobs/{id}/candidates` | raw submissions, `Page[CandidateOut]`, dynamic columns; `?submission_status=` |
+| GET | `/jobs/{id}/candidates/ranked` | `Page[RankedCandidateOut]`; `?sort=score&min_score=&skill=` |
 | GET | `/candidates/{id}` | profile + responses + AI result + resume URL |
-| GET | `/candidates/{id}/evidence` | US-23 |
+| GET | `/candidates/{id}/evidence` | Phase 2 (US-23) — out of scope |
 | GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8) |
 | PATCH | `/candidates/{id}` | status changes |
+
+Candidates that failed parsing are **not** a second list embedded in the ranked
+response. They're retrieved from `GET /jobs/{id}/candidates?submission_status=PARSE_ERROR`
+— one collection, filtered, per P2/P5. Aggregate counts (total, parsed, ranked,
+parse-error) live on `GET /jobs/{id}` detail and on process task status, not on the
+ranked endpoint.
 
 ## Scheduling
 | Method | Path | Notes |
 |---|---|---|
-| GET / PUT | `/scheduling/preferences` | availability windows |
+| GET / PUT | `/scheduling/preferences` | availability windows; singleton, `PUT` (P6) — see schema note on `available_days` |
 | POST | `/scheduling/sync-calendar` | free/busy pull; 409 REAUTH_REQUIRED if scope lost |
-| GET | `/scheduling/available-slots` | `?job_id=&count=` computed, fresh |
-| POST | `/interviews/schedule` | candidate_ids -> slots + Calendar events + Meet links |
-| GET | `/interviews` | master schedule, paginated |
+| GET | `/scheduling/available-slots` | `?job_id=&count=` — bare list, computed and fresh, not `Page[T]` (P5) |
+| POST | `/interviews` | `{job_id, candidate_ids}` -> async (P4), 202 `TaskOut`; slots + Calendar events + Meet links |
+| GET | `/interviews` | `Page[InterviewSlotOut]`, cross-job master schedule; `?job_id=&status=` (P2) |
 | PATCH | `/interviews/{id}` | cancel / reschedule via status |
 
 Re-fetch free/busy immediately before allocation, and conflict-check at event-creation
@@ -102,14 +156,19 @@ time. That is TR-05 and defect #4 in one line of policy.
 ## Email
 | Method | Path | Notes |
 |---|---|---|
-| POST | `/emails/send` | `{type, candidate_ids[], subject?, body?}` — one endpoint |
-| GET | `/emails` | history, paginated, `?candidate_id=&type=` |
-| GET | `/emails/replies` | classified replies, `?needs_review=true` |
-| POST | `/emails/replies/{id}/resolve` | manual intent override |
+| POST | `/emails/send` | `{type, candidate_ids[], subject?, body?}` — async (P4), 202 `TaskOut` |
+| GET | `/emails` | `Page[EmailLogOut]`, cross-job history; `?job_id=&candidate_id=&type=` (P2) |
+| GET | `/emails/replies` | Phase 2 — out of scope |
+| POST | `/emails/replies/{id}/resolve` | Phase 2 — out of scope |
 
 Collapsed from four endpoints to one typed endpoint. Every send carries an
 `idempotency_key`; duplicate keys return 200 with the original log row rather than
 sending twice.
+
+## Tasks
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/tasks/{task_id}` | `TaskOut` — poll target for every 202 response (P4) |
 
 ## Admin
 | Method | Path | Notes |
