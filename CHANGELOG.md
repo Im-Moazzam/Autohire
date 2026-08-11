@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Added
+- US-01: `frontend/src/pages/Dashboard.tsx` and `AuthError.tsx` — placeholder
+  redirect targets for the OAuth callback's success/failure paths, wired into
+  `router.tsx`. Added to unblock manual end-to-end verification against real
+  Google OAuth; Saif replaces both with real screens.
+- `.mise.toml`: task set mirroring the Makefile (`up`, `down`, `db:migrate`,
+  `db:revision`, `db:seed`, `test`, `lint`, `api-client`, `docs`, `reset`, etc.)
+  so the team isn't dependent on `make`, which isn't available by default on
+  Windows/PowerShell
 - US-01: Google OAuth sign-up. `recruiters` table + migration (`account_state`
   enum `ACTIVE`/`SUSPENDED`/`REAUTH_REQUIRED`, `google_token_expires_at`,
   nullable `google_refresh_token`); `app/adapters/google/oauth.py` (httpx-only,
