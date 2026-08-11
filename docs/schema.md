@@ -32,6 +32,8 @@ admin_action_enum      : ACTIVATE_RECRUITER | SUSPEND_RECRUITER | VIEW_QUOTA_ALE
                          | RETRY_TASK
 api_name_enum          : GOOGLE_DRIVE | GOOGLE_GMAIL | GOOGLE_CALENDAR | OPENAI
 recruiter_state_enum   : ACTIVE | SUSPENDED | REAUTH_REQUIRED
+weekday_enum           : MONDAY | TUESDAY | WEDNESDAY | THURSDAY | FRIDAY
+                         | SATURDAY | SUNDAY
 ```
 
 `PARSE_ERROR` and `recruiter_state_enum` are additions to the submitted ERD —
@@ -68,13 +70,19 @@ ERD (US-01); see `docs/drift.md`.
 |---|---|---|
 | preference_id | UUID | PK |
 | recruiter_id | UUID | FK, UNIQUE, NOT NULL |
-| available_days | TEXT[] | NOT NULL |
+| available_days | TEXT[] | NOT NULL — values constrained to `weekday_enum` |
 | available_start_time | TIME | NOT NULL |
 | available_end_time | TIME | NOT NULL |
 | slot_duration_minutes | INTEGER | NOT NULL, DEFAULT 30 |
 | last_synced_at | TIMESTAMPTZ | NULL |
 
-CHECK: `available_start_time < available_end_time`.
+CHECK: `available_start_time < available_end_time`. `available_days` is `TEXT[]`
+rather than `weekday_enum[]` (Postgres enum arrays are workable but awkward with
+SQLAlchemy) but should be constrained via a `CHECK` that every element is one of
+`weekday_enum`'s values, not left free-form. **Currently untyped** — there is no
+migration for `scheduling_preferences` yet, so this constraint has no home until one
+lands. Add it in **US-24** (Availability windows), the story that creates this table;
+don't let it slip to a later cleanup pass.
 
 ### form_templates (N:1 -> recruiters)
 | Column | Type | Notes |
@@ -124,6 +132,13 @@ UNIQUE (template_id, field_order).
 replaces `google_form_url`. Use a random 16-char token, not the UUID, so job IDs
 are not enumerable by candidates.
 
+`status` and `is_accepting_responses` interact: `status` is the lifecycle
+(`DRAFT -> LIVE -> CLOSED -> PROCESSED`, see `docs/api-contract.md` § Jobs);
+`is_accepting_responses` is a pause/resume toggle within `LIVE` only. Applications
+are accepted iff `status == LIVE AND is_accepting_responses AND now < expires_at` —
+all three conditions, not either field alone. This was previously ambiguous here;
+both fields can currently stop applications, and neither is authoritative on its own.
+
 INDEX on (recruiter_id, status), and (expires_at) WHERE status = 'LIVE'.
 
 ### candidates (N:1 -> job_postings)
@@ -144,6 +159,11 @@ INDEX on (recruiter_id, status), and (expires_at) WHERE status = 'LIVE'.
 
 A candidate is scoped to one job. Same person, two jobs = two rows.
 UNIQUE (job_id, email) — prevents double submission to the same posting.
+
+`resume_url` in API responses (`CandidateOut`) is a computed field, not a stored
+column — derived from `resume_drive_url` when `APP_ENV != local` or from
+`resume_storage_key` when `APP_ENV == local`. Clients never construct this URL
+themselves; they read whichever value the response layer resolved.
 
 ### candidate_form_responses (weak)
 | Column | Type | Notes |
