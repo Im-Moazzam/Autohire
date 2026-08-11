@@ -30,8 +30,7 @@ task_type_enum         : RESUME_PARSE | BATCH_RANKING | EMAIL_DISPATCH
 task_status_enum       : PENDING | RUNNING | SUCCESS | FAILED | RETRIED
 admin_action_enum      : ACTIVATE_RECRUITER | SUSPEND_RECRUITER | VIEW_QUOTA_ALERT
                          | RETRY_TASK
-api_name_enum          : GOOGLE_DRIVE | GOOGLE_GMAIL | GOOGLE_CALENDAR
-                         | OPENAI | PINECONE
+api_name_enum          : GOOGLE_DRIVE | GOOGLE_GMAIL | GOOGLE_CALENDAR | OPENAI
 recruiter_state_enum   : ACTIVE | SUSPENDED | REAUTH_REQUIRED
 ```
 

@@ -141,6 +141,114 @@ def test_missing_required_scope_sets_reauth_required(
     assert recruiter.account_state == RecruiterState.REAUTH_REQUIRED
 
 
+def test_tc07_reconnect_replaces_tokens_and_sets_active(
+    client: TestClient, db_session: Session
+) -> None:
+    _, state = _start_login(client)
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=FAKE_TOKENS),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            follow_redirects=False,
+        )
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    recruiter.account_state = RecruiterState.REAUTH_REQUIRED
+    db_session.commit()
+
+    reconnect_response = client.get("/api/v1/auth/google/reconnect", follow_redirects=False)
+    assert reconnect_response.status_code == 307
+    _, reconnect_state = _start_login(client)
+
+    new_tokens = GoogleTokens(
+        access_token="second-access-token",
+        refresh_token="second-refresh-token",
+        expires_in=3600,
+        granted_scopes=FULL_SCOPES,
+    )
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=new_tokens),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": reconnect_state},
+            follow_redirects=False,
+        )
+
+    db_session.expire_all()
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    assert recruiter.account_state == RecruiterState.ACTIVE
+    assert recruiter.google_access_token != "second-access-token"
+
+
+def test_tc08_reconnect_without_new_refresh_token_keeps_existing(
+    client: TestClient, db_session: Session
+) -> None:
+    _, state = _start_login(client)
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=FAKE_TOKENS),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            follow_redirects=False,
+        )
+    original = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    original_refresh_token = original.google_refresh_token
+
+    _, reconnect_state = _start_login(client)
+    tokens_without_refresh = GoogleTokens(
+        access_token="second-access-token",
+        refresh_token=None,
+        expires_in=3600,
+        granted_scopes=FULL_SCOPES,
+    )
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=tokens_without_refresh),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": reconnect_state},
+            follow_redirects=False,
+        )
+
+    db_session.expire_all()
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    assert recruiter.google_refresh_token == original_refresh_token
+    assert recruiter.google_refresh_token is not None
+
+
+def test_reconnect_while_already_active_is_harmless(
+    client: TestClient, db_session: Session
+) -> None:
+    _, state = _start_login(client)
+    with (
+        patch("app.api.routes.auth.exchange_code", return_value=FAKE_TOKENS),
+        patch("app.api.routes.auth.fetch_userinfo", return_value=FAKE_USERINFO),
+    ):
+        client.get(
+            "/api/v1/auth/google/callback",
+            params={"code": "auth-code", "state": state},
+            follow_redirects=False,
+        )
+
+    response = client.get("/api/v1/auth/google/reconnect", follow_redirects=False)
+
+    assert response.status_code == 307
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="google-sub-123").one()
+    assert recruiter.account_state == RecruiterState.ACTIVE
+
+
+def test_reconnect_without_session_cookie_is_401(client: TestClient) -> None:
+    response = client.get("/api/v1/auth/google/reconnect")
+    assert response.status_code == 401
+
+
 def test_me_returns_recruiter_and_never_leaks_tokens(
     client: TestClient, db_session: Session
 ) -> None:

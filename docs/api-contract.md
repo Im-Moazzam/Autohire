@@ -41,7 +41,7 @@ Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTIN
 | POST | `/auth/refresh` | not needed with cookie sessions (US-01); drop or repurpose in US-02 |
 | POST | `/auth/logout` | invalidate session — US-02 |
 | GET | `/auth/me` | profile + `granted_scopes` + `account_state` |
-| POST | `/auth/google/reconnect` | US-03 — re-consent, replace stored tokens |
+| GET | `/auth/google/reconnect` | US-03 — restarts consent (must redirect the browser, so GET not POST); callback replaces stored tokens |
 
 ## Templates
 | Method | Path | Notes |
