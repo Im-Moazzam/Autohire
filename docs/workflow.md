@@ -89,6 +89,12 @@ Once TS-00 and the stubbed auth boundary are in, you can work genuinely in paral
 
 - **Moazzam** — auth, templates, jobs, dashboard, scheduling, admin
 - **Saif** — apply page, candidate intake, parsing, AI pipeline, ranking UI, email
+- **Solo review while Saif is unavailable (2026-08-11).** The two-person review
+rule below assumes two available developers. Saif is unavailable for an
+indefinite period and the deadline is fixed at end of September, so backend PRs
+are self-reviewed and merged rather than held. Frontend PRs resume normal review
+when he returns. Blocking the critical path on an absent reviewer costs weeks
+and gains nothing.
 
 You'll collide in `components/ui` and `docs/schema` only. Agree migrations verbally
 before either of you writes one — two Alembic heads is an annoying half hour.
