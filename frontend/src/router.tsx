@@ -3,6 +3,8 @@ import { AppShell } from "./components/app/AppShell";
 import { PublicLayout } from "./components/app/PublicLayout";
 import { Home } from "./pages/Home";
 import { Apply } from "./pages/Apply";
+import { Dashboard } from "./pages/Dashboard";
+import { AuthError } from "./pages/AuthError";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -19,7 +21,11 @@ const devRoutes = import.meta.env.DEV
 export const router = createBrowserRouter([
   {
     element: <AppShell />,
-    children: [{ path: "/", element: <Home /> }],
+    children: [
+      { path: "/", element: <Home /> },
+      { path: "/dashboard", element: <Dashboard /> },
+      { path: "/auth/error", element: <AuthError /> },
+    ],
   },
   {
     element: <PublicLayout />,
