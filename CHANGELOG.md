@@ -3,6 +3,45 @@
 ## [Unreleased]
 
 ### Added
+- TS-02: Phase 1 stub-route contract. All 24 remaining Phase 1 endpoints now exist
+  with real route signatures, exact Pydantic response models, and fixture data —
+  Saif can build all 15 screens against real generated types before any backend
+  logic lands. Four shared primitives every route uses:
+  `app/schemas/common.py` (`Page[T]`/`PaginationParams`/`ErrorOut`/`error_responses()`),
+  three global exception handlers in `main.py` (`HTTPException` — registered on
+  `starlette.exceptions.HTTPException` so routing-level 404/405s are covered too,
+  not just `fastapi.HTTPException` — `RequestValidationError`, and `ReauthRequired`,
+  all emitting `ErrorOut`; `extra="forbid"` violations get `code="VALIDATION_ERROR"`
+  with per-field Pydantic errors preserved under `details`, not flattened),
+  `get_owned_job`/`get_owned_candidate`/`get_owned_template` in `app/api/deps.py`
+  (stub bodies validate against fixtures; real `recruiter_id` scoping lands with
+  each owning story — the `recruiter` dependency is already in the signature so
+  that story doesn't change it), and `app/api/fixtures.py` (all stub data in one
+  module, including every documented failure state: a `PARSE_ERROR` candidate, an
+  expired apply slug, a paused apply slug, an illegal job transition, a `FAILED`
+  email, a `CANCELLED` interview slot, and a slot with a null `google_meet_link`).
+  `deps.py`'s 401 now carries `code="NOT_AUTHENTICATED"`; the existing
+  `ReauthRequired` handler moved onto the same `ErrorOut` model (its body gains a
+  `"details": null` key — `test_google_session.py`'s TC-03 assertion updated to
+  match, per ADR-004). All enums (`FieldType`, `JobStatus`, `SubmissionStatus`,
+  `SlotStatus`, `EmailType`, `DeliveryStatus`, `TaskType`, `TaskStatus`, `Weekday`)
+  are real `StrEnum`s in `app/schemas/enums.py`, surfacing to `api.d.ts` as TS union
+  types. `resume_url` and `apply_url` are computed, never columns — `apply_url` is
+  `f"{PUBLIC_APPLY_BASE_URL}/{apply_slug}"` (ADR-004 P10; the env var already ends
+  in `/apply`, so no second segment is appended). Public apply routes
+  (`GET`/`POST /api/v1/public/apply/{apply_slug}`) live on their own `APIRouter`
+  with zero `get_current_recruiter` anywhere in the module — asserted structurally
+  in `test_stub_common.py`, not just by convention. `Page[T]` uses PEP 695 generic
+  syntax and serializes to OpenAPI as `Page_JobOut_`-style names (Pydantic v2's
+  default generic-schema naming) — expected, not accidental. Every handler carries
+  `# STUB: US-XX`. Not stubbed, by design: `DELETE /jobs/{id}` (Phase 2, US-09/10 —
+  excluded from Phase 1 by US-06 itself) and the Phase 2/3 endpoints TS-02 already
+  named out of scope (`/templates/{id}/duplicate`, `/candidates/{id}/evidence`,
+  `/jobs/{id}/candidates/export`, `/emails/replies*`, `/admin/*`,
+  `/scheduling/sync-calendar`). 73 tests total (up from 30): one file per contract
+  section plus `test_stub_common.py` for the cross-cutting rules (pagination shape,
+  401/404/409/422 all matching `ErrorOut`, cross-tenant 404-not-403, public router
+  has no auth dependency).
 - US-02: Logout and profile update. `POST /api/v1/auth/logout` clears the
   session cookie unconditionally (no `get_current_recruiter` dependency, so
   it's idempotent with or without a session) with the same `httponly`/
@@ -87,6 +126,11 @@
   `backend/app/services/` package added ahead of the first service (TS-00)
 
 ### Changed
+- `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
+  `make api-client` for all 24 TS-02 endpoints; `docs/api-contract.md` corrected to
+  match what was actually built: ranked-candidates has no `?sort=` param (sort is
+  implicit by `rank_position`), and email send/list use `email_type`, not `type`
+  (TS-02)
 - `docs/openapi.json` and `frontend/src/lib/api.d.ts` regenerated via
   `make api-client` for `/auth/logout`, `PATCH /recruiters/me`, and the
   `granted_scopes` field on `RecruiterOut` (US-02)
