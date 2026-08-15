@@ -18,6 +18,10 @@ _WRITE_FAILED = {
     "code": "TEMPLATE_WRITE_FAILED",
     "message": "The template could not be saved.",
 }
+_TEMPLATE_IN_USE = {
+    "code": "TEMPLATE_IN_USE",
+    "message": "This template is referenced by a job posting.",
+}
 
 
 def _commit(db: Session, template: FormTemplate) -> None:
@@ -158,8 +162,9 @@ def replace_template(
 
 
 def soft_delete_template(db: Session, template: FormTemplate) -> None:
-    # ponytail: TEMPLATE_IN_USE (409) is declared on this route but not checked
-    # here — job_postings doesn't exist until US-06. Wire the real query then;
-    # see docs/drift.md.
+    from app.services import job_service  # local: job_service imports this module
+
+    if job_service.job_references_template(db, template.template_id):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_TEMPLATE_IN_USE)
     template.deleted_at = datetime.now(UTC)
     db.commit()

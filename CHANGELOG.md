@@ -3,6 +3,29 @@
 ## [Unreleased]
 
 ### Added
+- US-06: Job launch gets real persistence, the first `google_call`-backed route,
+  and the first resource adapter. `job_postings` migration (`job_status_enum`,
+  UNIQUE `apply_slug`, `(recruiter_id, status)` index, partial index on
+  `expires_at WHERE status = 'LIVE'`). `app/services/job_service.py` holds the
+  launch logic: `POST /jobs` commits the row as `DRAFT` first, then calls
+  `ResumeStore.create_job_folder` outside any open transaction, then flips the
+  row to `LIVE` — no DB transaction is ever held open across the network call.
+  A failed folder creation leaves the row `DRAFT` and returns `RESUME_FOLDER_FAILED`
+  (502 in cloud mode, 500 in local — an upstream failure and our own failure aren't
+  the same thing); retrying is `PATCH /jobs/{id} {"status": "LIVE"}`, which runs the
+  same launch function and never mints a second `apply_slug` for the same job.
+  Closing a job is `PATCH {"status": "CLOSED"}`, not a `/close` action endpoint
+  (ADR-004 P3). New `ResumeStore` Protocol (`app/adapters/base.py`) with
+  `LocalResumeStore` (`{LOCAL_STORAGE_ROOT}/resumes/{job_id}/`, new setting —
+  defaults to `/storage`, the docker-compose mount; overridable for CI/host runs
+  that aren't in that container) and `DriveResumeStore` (via
+  `google_call`, never `googleapiclient` or raw `httpx`), selected by `APP_ENV`.
+  `get_owned_job` and `candidates.py` now return/consume a real `JobPosting` ORM
+  row instead of a fixture dict. `TEMPLATE_IN_USE` (409) on `DELETE /templates/{id}`
+  is now enforced against `job_postings` (closes `docs/drift.md` row 27).
+  `submission_count`/`submission_counts` are a placeholder constant, not a query —
+  `candidates` doesn't exist until US-12/US-13 (`docs/drift.md` row 29). JD
+  embedding deferred to US-18 (`docs/drift.md` row 28).
 - US-04: Application templates get real persistence. `form_templates` and
   `template_fields` migration (partial UNIQUE `(recruiter_id, template_name)
   WHERE deleted_at IS NULL`; UNIQUE `(template_id, field_order)`; `field_type_enum`).

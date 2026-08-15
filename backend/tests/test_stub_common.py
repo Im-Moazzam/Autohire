@@ -5,11 +5,14 @@ from fastapi.testclient import TestClient
 from app.api import fixtures
 from app.api.deps import get_current_recruiter
 from app.api.routes.public import router as public_router
+from app.models.job import JobPosting
 
 ERROR_KEYS = {"code", "message", "details"}
 
 
-def test_tc01_list_endpoint_default_page(authed_client: TestClient) -> None:
+def test_tc01_list_endpoint_default_page(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.get("/api/v1/jobs")
     assert response.status_code == 200
     body = response.json()
@@ -19,7 +22,9 @@ def test_tc01_list_endpoint_default_page(authed_client: TestClient) -> None:
     assert body["size"] == 20
 
 
-def test_tc02_list_endpoint_size_one(authed_client: TestClient) -> None:
+def test_tc02_list_endpoint_size_one(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.get("/api/v1/jobs", params={"size": 1})
     body = response.json()
     assert response.status_code == 200
@@ -35,7 +40,9 @@ def test_tc03_private_route_without_cookie_is_401_errorout(client: TestClient) -
     assert body["code"] == "NOT_AUTHENTICATED"
 
 
-def test_tc10_update_schema_unknown_field_is_422(authed_client: TestClient) -> None:
+def test_tc10_update_schema_unknown_field_is_422(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.patch(
         f"/api/v1/jobs/{fixtures.JOB_LIVE_ID}", json={"not_a_real_field": "x"}
     )
@@ -54,7 +61,9 @@ def test_tc11_unknown_job_id_is_404_not_403(authed_client: TestClient) -> None:
     assert body["code"] == "JOB_NOT_FOUND"
 
 
-def test_409_error_matches_errorout_shape(authed_client: TestClient) -> None:
+def test_409_error_matches_errorout_shape(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.patch(
         f"/api/v1/jobs/{fixtures.JOB_DRAFT_ID}", json={"status": "PROCESSED"}
     )

@@ -94,16 +94,15 @@ replacing rows wholesale.
 (create and `PUT`), so the client can send any ascending sequence (e.g. `[5, 10, 20]`)
 without hitting the `(template_id, field_order)` UNIQUE constraint.
 
-`DELETE /templates/{id}` declares 409 `TEMPLATE_IN_USE` in its OpenAPI response but
-does not check it yet — `job_postings` doesn't exist until US-06. Soft-delete always
-succeeds in Phase 1 up to US-04; the 409 branch is kept in the generated client so
-US-06 can wire the real check without a second contract change. See `docs/drift.md`.
+`DELETE /templates/{id}` returns 409 `TEMPLATE_IN_USE` when a non-deleted job posting
+references the template (US-06 wired the real check against `job_postings`; drift
+row 27 closed).
 
 ## Jobs
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/jobs` | paginated; `?status=LIVE&q=` |
-| POST | `/jobs` | JD + template + TTL -> creates Drive folder, `apply_slug`, JD embedding |
+| POST | `/jobs` | JD + template + TTL -> creates DRAFT row, then a resume folder, then flips to LIVE. `jd_embedding_id` stays NULL (US-18) |
 | GET | `/jobs/{id}` | detail + counts |
 | PATCH | `/jobs/{id}` | JD edit, TTL extend/revoke, `is_accepting_responses`, `status` |
 | DELETE | `/jobs/{id}` | Phase 2 (US-09/US-10) — out of scope; US-06 explicitly excludes edit/TTL-extend/delete from Phase 1 |
@@ -113,6 +112,13 @@ US-06 can wire the real check without a second contract change. See `docs/drift.
 `{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a
 batch/async operation. Legal transition graph: `DRAFT -> LIVE -> CLOSED -> PROCESSED`.
 Any other transition, including skipping a state, is 409 `INVALID_STATE_TRANSITION`.
+
+**Retrying a failed launch is also `PATCH`.** `POST /jobs` commits the row as `DRAFT`
+before the resume-folder call; if that call fails, the row stays `DRAFT` and the
+response is `RESUME_FOLDER_FAILED` — 502 in cloud mode (an upstream/Drive failure),
+500 in local mode (our own filesystem failed). Retry with
+`PATCH /jobs/{id} {"status": "LIVE"}`, which runs the same launch logic — one DRAFT
+row per attempt, and the original `apply_slug` survives every retry.
 
 `status` is lifecycle; `is_accepting_responses` is a pause/resume toggle *within*
 `LIVE` — a recruiter can pause and resume intake without leaving the LIVE state or
