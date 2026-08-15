@@ -31,17 +31,25 @@
   in `/apply`, so no second segment is appended). Public apply routes
   (`GET`/`POST /api/v1/public/apply/{apply_slug}`) live on their own `APIRouter`
   with zero `get_current_recruiter` anywhere in the module — asserted structurally
-  in `test_stub_common.py`, not just by convention. `Page[T]` uses PEP 695 generic
-  syntax and serializes to OpenAPI as `Page_JobOut_`-style names (Pydantic v2's
-  default generic-schema naming) — expected, not accidental. Every handler carries
-  `# STUB: US-XX`. Not stubbed, by design: `DELETE /jobs/{id}` (Phase 2, US-09/10 —
-  excluded from Phase 1 by US-06 itself) and the Phase 2/3 endpoints TS-02 already
-  named out of scope (`/templates/{id}/duplicate`, `/candidates/{id}/evidence`,
+  in `test_stub_common.py`, not just by convention. `Page[T]` uses legacy
+  `TypeVar`/`Generic` syntax, not PEP 695 — the pinned `mypy==1.11.2` pre-commit
+  hook rejects PEP 695 generics, so ruff's UP046/UP047 autofix is suppressed with
+  `noqa` and a comment naming the pin. It still serializes to OpenAPI as
+  `Page_JobOut_`-style names (Pydantic v2's default generic-schema naming) —
+  expected, not accidental. Every handler carries `# STUB: US-XX`. Not stubbed, by
+  design: `DELETE /jobs/{id}` (Phase 2, US-09/10 — excluded from Phase 1 by US-06
+  itself) and the Phase 2/3 endpoints TS-02 already named out of scope
+  (`/templates/{id}/duplicate`, `/candidates/{id}/evidence`,
   `/jobs/{id}/candidates/export`, `/emails/replies*`, `/admin/*`,
   `/scheduling/sync-calendar`). 73 tests total (up from 30): one file per contract
   section plus `test_stub_common.py` for the cross-cutting rules (pagination shape,
   401/404/409/422 all matching `ErrorOut`, cross-tenant 404-not-403, public router
-  has no auth dependency).
+  has no auth dependency). `mise run db:seed` now seeds one fake recruiter through
+  the real `upsert_recruiter` path — the same fake-token/userinfo shape
+  `tests/conftest.py`'s `authed_client` uses, so the seeded row matches what
+  production login produces rather than being a parallel mock — and prints a ready
+  session cookie, so the stub routes can be exercised manually without real Google
+  OAuth credentials.
 - US-02: Logout and profile update. `POST /api/v1/auth/logout` clears the
   session cookie unconditionally (no `get_current_recruiter` dependency, so
   it's idempotent with or without a session) with the same `httponly`/
