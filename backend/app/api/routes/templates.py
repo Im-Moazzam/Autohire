@@ -1,17 +1,17 @@
-import uuid
+from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy.orm import Session
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
-
-from app.api import fixtures
-from app.api.deps import get_current_recruiter, get_owned_template
+from app.api.deps import get_current_recruiter, get_db, get_owned_template
+from app.models.recruiter import Recruiter
+from app.models.template import FormTemplate
 from app.schemas.common import (
     Page,
     PaginationParams,
     error_responses,
-    paginate,
     pagination_params,
 )
 from app.schemas.template import TemplateCreate, TemplateOut, TemplateReplace
+from app.services import template_service
 
 router = APIRouter(
     prefix="/templates",
@@ -21,56 +21,56 @@ router = APIRouter(
 
 
 @router.get("", response_model=Page[TemplateOut], responses=error_responses(401))
-def list_templates(params: PaginationParams = Depends(pagination_params)) -> Page[TemplateOut]:
-    # STUB: US-04
-    items = [TemplateOut(**t) for t in fixtures.TEMPLATES.values()]
-    return paginate(items, params)
+def list_templates(
+    params: PaginationParams = Depends(pagination_params),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> Page[TemplateOut]:
+    items, total = template_service.list_templates(db, recruiter.recruiter_id, params)
+    return Page[TemplateOut](
+        items=[TemplateOut.model_validate(item) for item in items],
+        total=total,
+        page=params.page,
+        size=params.size,
+    )
 
 
 @router.post(
     "",
     response_model=TemplateOut,
     status_code=status.HTTP_201_CREATED,
-    responses=error_responses(401, 422),
+    responses=error_responses(401, 409, 422),
 )
-def create_template(payload: TemplateCreate) -> TemplateOut:
-    # STUB: US-04 — echoes the payload back as a new fixture-shaped template.
-    first = next(iter(fixtures.TEMPLATES.values()))
-    return TemplateOut(
-        template_id=uuid.uuid4(),
-        template_name=payload.template_name,
-        fields=[
-            {**field.model_dump(), "field_id": field.field_id or uuid.uuid4()}
-            for field in payload.fields
-        ],
-        created_at=first["created_at"],
-        updated_at=first["created_at"],
+def create_template(
+    payload: TemplateCreate,
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> FormTemplate:
+    return template_service.create_template(
+        db, recruiter.recruiter_id, payload.template_name, payload.fields
     )
 
 
 @router.get("/{template_id}", response_model=TemplateOut, responses=error_responses(401, 404))
-def get_template(template: dict = Depends(get_owned_template)) -> TemplateOut:
-    # STUB: US-04
-    return TemplateOut(**template)
+def get_template(template: FormTemplate = Depends(get_owned_template)) -> FormTemplate:
+    return template
 
 
-@router.put("/{template_id}", response_model=TemplateOut, responses=error_responses(401, 404, 422))
+@router.put(
+    "/{template_id}",
+    response_model=TemplateOut,
+    responses=error_responses(401, 404, 409, 422),
+)
 def replace_template(
-    payload: TemplateReplace, template: dict = Depends(get_owned_template)
-) -> TemplateOut:
-    # STUB: US-04 — TemplateFieldIn.field_id present means "keep this row"; a
-    # real implementation reconciles by field_id rather than delete-and-recreate,
-    # since candidate_form_responses.field_id is an FK.
-    return TemplateOut(
-        template_id=template["template_id"],
-        template_name=payload.template_name,
-        fields=[
-            {**field.model_dump(), "field_id": field.field_id or uuid.uuid4()}
-            for field in payload.fields
-        ],
-        created_at=template["created_at"],
-        updated_at=template["created_at"],
-    )
+    payload: TemplateReplace,
+    template: FormTemplate = Depends(get_owned_template),
+    db: Session = Depends(get_db),
+) -> FormTemplate:
+    """Replaces the full field set: the client sends the whole ordered array,
+    the server reconciles it against existing rows by `field_id` (keep/update
+    when present, insert when absent, delete when missing from the payload) —
+    this is not a partial update."""
+    return template_service.replace_template(db, template, payload.template_name, payload.fields)
 
 
 @router.delete(
@@ -78,15 +78,9 @@ def replace_template(
     status_code=status.HTTP_204_NO_CONTENT,
     responses=error_responses(401, 404, 409),
 )
-def delete_template(template: dict = Depends(get_owned_template)) -> Response:
-    # STUB: US-04 — soft delete; 409 TEMPLATE_IN_USE if referenced by a LIVE job.
-    in_use = any(
-        job["template_id"] == template["template_id"] and job["status"] == "LIVE"
-        for job in fixtures.JOBS.values()
-    )
-    if in_use:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"code": "TEMPLATE_IN_USE", "message": "Template is used by a LIVE job."},
-        )
+def delete_template(
+    template: FormTemplate = Depends(get_owned_template),
+    db: Session = Depends(get_db),
+) -> Response:
+    template_service.soft_delete_template(db, template)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

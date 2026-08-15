@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- US-04: Application templates get real persistence. `form_templates` and
+  `template_fields` migration (partial UNIQUE `(recruiter_id, template_name)
+  WHERE deleted_at IS NULL`; UNIQUE `(template_id, field_order)`; `field_type_enum`).
+  `app/services/template_service.py` holds all logic — routes are thin. `POST`
+  creates the template and its fields in one transaction (any DB-level failure,
+  unique violation or otherwise, rolls back the whole insert and the session
+  cleanly, so a bad field never leaves an orphaned template row — TC-10). `PUT`
+  (not `PATCH` — ADR-004 P6) reconciles the full field set by `field_id` rather
+  than delete-and-recreate, since `candidate_form_responses.field_id` is an FK.
+  `field_order` is normalized server-side to a dense 0-based sequence on every
+  write; reordering existing rows on `PUT` bumps them out of range first since
+  the order constraint isn't deferrable. `DELETE` soft-deletes (`deleted_at`),
+  freeing the name for reuse. Cross-tenant access is 404, not 403 (ADR-004 P8).
+  Added `DUPLICATE_TEMPLATE_NAME` (409) to the error-code list — additive, not a
+  shape change; TS-02's `TemplateOut` shape was checked against `docs/schema.md`
+  and needed no changes. `TEMPLATE_IN_USE` (409) stays declared on `DELETE` but is
+  not enforced yet — `job_postings` doesn't exist until US-06 (`docs/drift.md`
+  row 27).
 - TS-02: Phase 1 stub-route contract. All 24 remaining Phase 1 endpoints now exist
   with real route signatures, exact Pydantic response models, and fixture data —
   Saif can build all 15 screens against real generated types before any backend

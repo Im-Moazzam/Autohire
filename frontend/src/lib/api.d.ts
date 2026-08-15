@@ -162,7 +162,13 @@ export interface paths {
         };
         /** Get Template */
         get: operations["get_template_api_v1_templates__template_id__get"];
-        /** Replace Template */
+        /**
+         * Replace Template
+         * @description Replaces the full field set: the client sends the whole ordered array,
+         *     the server reconciles it against existing rows by `field_id` (keep/update
+         *     when present, insert when absent, delete when missing from the payload) —
+         *     this is not a partial update.
+         */
         put: operations["replace_template_api_v1_templates__template_id__put"];
         post?: never;
         /** Delete Template */
@@ -1373,6 +1379,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
             /** @description Unprocessable Entity */
             422: {
                 headers: {
@@ -1472,6 +1487,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

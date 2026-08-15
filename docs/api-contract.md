@@ -55,7 +55,8 @@ these. Summary:
 Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTING` (409),
 `DUPLICATE_SUBMISSION` (409), `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413),
 `QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409),
-`TEMPLATE_IN_USE` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9).
+`TEMPLATE_IN_USE` (409), `DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401),
+`VALIDATION_ERROR` (422, ADR-004 P9).
 Per-resource `{RESOURCE}_NOT_FOUND` codes (`JOB_NOT_FOUND`, `CANDIDATE_NOT_FOUND`, etc.)
 follow the obvious pattern and aren't enumerated individually.
 
@@ -88,6 +89,15 @@ absent means create a new one. This matters because `candidate_form_responses.fi
 is a foreign key — deleting and recreating fields on every save would cascade away
 already-submitted responses. `PUT` reconciles the field set by `field_id` rather than
 replacing rows wholesale.
+
+`field_order` is normalized server-side to a 0-based dense sequence on every write
+(create and `PUT`), so the client can send any ascending sequence (e.g. `[5, 10, 20]`)
+without hitting the `(template_id, field_order)` UNIQUE constraint.
+
+`DELETE /templates/{id}` declares 409 `TEMPLATE_IN_USE` in its OpenAPI response but
+does not check it yet — `job_postings` doesn't exist until US-06. Soft-delete always
+succeeds in Phase 1 up to US-04; the 409 branch is kept in the generated client so
+US-06 can wire the real check without a second contract change. See `docs/drift.md`.
 
 ## Jobs
 | Method | Path | Notes |
