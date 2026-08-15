@@ -23,10 +23,10 @@ with two implementations: a local one and a real one. `APP_ENV` picks which.
 
 ```python
 class ResumeStore(Protocol):
-    def save(self, job_id: UUID, filename: str, data: bytes) -> StoredFile: ...
-    def url_for(self, file_ref: str) -> str: ...
-    def fetch(self, file_ref: str) -> bytes: ...
+    def create_job_folder(self, recruiter: Recruiter, job_id: UUID, name: str) -> str: ...
 ```
+
+(`store_resume(...)` — the file-upload half — is added in US-12, once `candidates` exists.)
 
 | Concern | `APP_ENV=local` | `APP_ENV=cloud` |
 |---|---|---|

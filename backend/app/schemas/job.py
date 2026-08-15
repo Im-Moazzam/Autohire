@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from app.schemas.enums import JobStatus, SubmissionStatus
 
@@ -44,6 +44,16 @@ class JobCreate(BaseModel):
     job_description: str
     template_id: uuid.UUID
     expires_at: datetime
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expires_in_future(cls, value: datetime) -> datetime:
+        # Naive datetimes are treated as UTC rather than blowing up the
+        # comparison against an aware "now".
+        aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+        if aware <= datetime.now(UTC):
+            raise ValueError("expires_at must be in the future")
+        return value
 
 
 class JobUpdate(BaseModel):

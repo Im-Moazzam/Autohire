@@ -1,0 +1,197 @@
+import secrets
+import uuid
+from datetime import UTC, datetime
+
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.adapters.base import ResumeStore
+from app.core.config import settings
+from app.models.job import JobPosting
+from app.models.recruiter import Recruiter
+from app.schemas.common import PaginationParams
+from app.schemas.enums import JobStatus
+from app.schemas.job import JobCreate, JobUpdate
+from app.services import template_service
+
+_TEMPLATE_NOT_FOUND = {"code": "TEMPLATE_NOT_FOUND", "message": "Template not found."}
+_MAX_SLUG_ATTEMPTS = 5
+
+# ponytail: candidates doesn't exist until US-12/US-13, so this can't be a
+# COUNT subquery yet. Both submission_count and submission_counts resolve to
+# this placeholder; swap for the real correlated subquery when US-13 lands
+# (docs/drift.md), which also closes this row.
+_SUBMISSION_COUNT_PLACEHOLDER = 0
+
+# Legal transition graph, ADR-004 P3 / docs/api-contract.md § Jobs. Moved out
+# of app/api/fixtures.py — jobs.py was its only caller.
+_LEGAL_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
+    JobStatus.DRAFT: {JobStatus.LIVE},
+    JobStatus.LIVE: {JobStatus.CLOSED},
+    JobStatus.CLOSED: {JobStatus.PROCESSED},
+    JobStatus.PROCESSED: set(),
+}
+
+
+def is_legal_transition(current: JobStatus, target: JobStatus) -> bool:
+    if current == target:
+        return True
+    return target in _LEGAL_TRANSITIONS[current]
+
+
+def submission_count_placeholder() -> int:
+    return _SUBMISSION_COUNT_PLACEHOLDER
+
+
+def _new_slug() -> str:
+    return secrets.token_urlsafe(12)
+
+
+def list_jobs(
+    db: Session,
+    recruiter_id: uuid.UUID,
+    params: PaginationParams,
+    status_filter: JobStatus | None,
+    q: str | None,
+) -> tuple[list[JobPosting], int]:
+    base = select(JobPosting).where(
+        JobPosting.recruiter_id == recruiter_id, JobPosting.deleted_at.is_(None)
+    )
+    if status_filter is not None:
+        base = base.where(JobPosting.status == status_filter)
+    if q:
+        base = base.where(JobPosting.job_title.ilike(f"%{q}%"))
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(
+        base.order_by(JobPosting.created_at)
+        .offset((params.page - 1) * params.size)
+        .limit(params.size)
+    ).all()
+    return list(rows), total
+
+
+def get_job(db: Session, recruiter_id: uuid.UUID, job_id: uuid.UUID) -> JobPosting | None:
+    return db.scalar(
+        select(JobPosting).where(
+            JobPosting.job_id == job_id,
+            JobPosting.recruiter_id == recruiter_id,
+            JobPosting.deleted_at.is_(None),
+        )
+    )
+
+
+def job_references_template(db: Session, template_id: uuid.UUID) -> bool:
+    return (
+        db.scalar(
+            select(JobPosting.job_id).where(
+                JobPosting.template_id == template_id, JobPosting.deleted_at.is_(None)
+            )
+        )
+        is not None
+    )
+
+
+def _insert_draft(db: Session, recruiter: Recruiter, payload: JobCreate) -> JobPosting:
+    for _ in range(_MAX_SLUG_ATTEMPTS):
+        job = JobPosting(
+            recruiter_id=recruiter.recruiter_id,
+            template_id=payload.template_id,
+            job_title=payload.job_title,
+            job_description=payload.job_description,
+            expires_at=payload.expires_at,
+            apply_slug=_new_slug(),
+            status=JobStatus.DRAFT,
+        )
+        db.add(job)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            continue
+        db.refresh(job)
+        return job
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={"code": "SLUG_GENERATION_FAILED", "message": "Could not generate a unique slug."},
+    )
+
+
+def finalize_launch(
+    db: Session, recruiter: Recruiter, job: JobPosting, store: ResumeStore
+) -> JobPosting:
+    """DRAFT -> LIVE. No DB transaction is held open across the store call —
+    the DRAFT row is already committed by the time this runs, so a failure
+    here leaves the row exactly where it was, retryable via the same call."""
+    if job.google_drive_folder_id is None:
+        try:
+            folder_id = store.create_job_folder(recruiter, job.job_id, job.job_title)
+        except Exception as exc:
+            # A Drive failure is an upstream problem (502); a local filesystem
+            # error is our own server's problem (500) — not the same failure.
+            status_code = (
+                status.HTTP_500_INTERNAL_SERVER_ERROR
+                if settings.app_env == "local"
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            raise HTTPException(
+                status_code=status_code,
+                detail={
+                    "code": "RESUME_FOLDER_FAILED",
+                    "message": "Could not create the resume storage folder.",
+                    "details": {"job_id": str(job.job_id), "cause": str(exc)},
+                },
+            ) from exc
+        job.google_drive_folder_id = folder_id
+    job.status = JobStatus.LIVE
+    job.updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+def create_job(
+    db: Session, recruiter: Recruiter, payload: JobCreate, store: ResumeStore
+) -> JobPosting:
+    template = template_service.get_template(db, recruiter.recruiter_id, payload.template_id)
+    if template is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_TEMPLATE_NOT_FOUND)
+    job = _insert_draft(db, recruiter, payload)
+    return finalize_launch(db, recruiter, job, store)
+
+
+def update_job(
+    db: Session, recruiter: Recruiter, job: JobPosting, payload: JobUpdate, store: ResumeStore
+) -> JobPosting:
+    if payload.status is not None and payload.status != job.status:
+        if not is_legal_transition(job.status, payload.status):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "INVALID_STATE_TRANSITION",
+                    "message": f"Cannot transition job from {job.status} to {payload.status}.",
+                },
+            )
+        if job.status == JobStatus.DRAFT and payload.status == JobStatus.LIVE:
+            # Retry path: same finalize_launch the create path runs, so a
+            # second failed attempt leaves the row DRAFT again, not a new row.
+            job = finalize_launch(db, recruiter, job, store)
+        else:
+            job.status = payload.status
+            if payload.status == JobStatus.CLOSED:
+                job.is_accepting_responses = False
+
+    if payload.job_title is not None:
+        job.job_title = payload.job_title
+    if payload.job_description is not None:
+        job.job_description = payload.job_description
+    if payload.expires_at is not None:
+        job.expires_at = payload.expires_at
+    if payload.is_accepting_responses is not None:
+        job.is_accepting_responses = payload.is_accepting_responses
+
+    job.updated_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(job)
+    return job

@@ -1,5 +1,6 @@
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -7,18 +8,33 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.adapters.google.oauth import GoogleTokens, GoogleUserInfo
+from app.api import fixtures
 from app.api.deps import get_db
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.main import app
 from app.models.api_usage_log import ApiUsageLog
+from app.models.job import JobPosting
 from app.models.recruiter import Recruiter, RecruiterState
 from app.models.template import FormTemplate
+
+
+@pytest.fixture(autouse=True)
+def _local_storage_root(tmp_path: Path) -> Generator[None, None, None]:
+    """LocalResumeStore writes here (APP_ENV=local) — point it at a per-test
+    tmp_path so tests never touch the real /storage mount or a bare host root."""
+    original = settings.local_storage_root
+    settings.local_storage_root = str(tmp_path)
+    yield
+    settings.local_storage_root = original
 
 
 @pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
+    # FK order: JobPosting references FormTemplate, so it must go first.
+    session.query(JobPosting).delete()
     session.query(ApiUsageLog).delete()
     session.query(FormTemplate).delete()
     session.query(Recruiter).delete()
@@ -71,6 +87,47 @@ def authed_client(client: TestClient) -> TestClient:
             follow_redirects=False,
         )
     return client
+
+
+@pytest.fixture
+def seeded_stub_jobs(authed_client: TestClient, db_session: Session) -> list[JobPosting]:
+    """Mirrors fixtures.JOBS (and the two fixture templates they reference) as
+    real rows under the authed recruiter, so stub routes that now query real
+    tables via get_owned_job (candidates, process) still have a job to find."""
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="stub-recruiter-sub").one()
+
+    for template_id, template in fixtures.TEMPLATES.items():
+        db_session.add(
+            FormTemplate(
+                template_id=template_id,
+                recruiter_id=recruiter.recruiter_id,
+                template_name=template["template_name"],
+                created_at=template["created_at"],
+                updated_at=template["updated_at"],
+            )
+        )
+    db_session.flush()
+
+    jobs = []
+    for job_id, job in fixtures.JOBS.items():
+        row = JobPosting(
+            job_id=job_id,
+            recruiter_id=recruiter.recruiter_id,
+            template_id=job["template_id"],
+            job_title=job["job_title"],
+            job_description=job["job_description"],
+            google_drive_folder_id=job["google_drive_folder_id"],
+            apply_slug=job["apply_slug"],
+            status=job["status"],
+            is_accepting_responses=job["is_accepting_responses"],
+            expires_at=job["expires_at"],
+            created_at=job["created_at"],
+            updated_at=job["updated_at"],
+        )
+        db_session.add(row)
+        jobs.append(row)
+    db_session.commit()
+    return jobs
 
 
 @pytest.fixture

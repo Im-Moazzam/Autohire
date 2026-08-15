@@ -1,15 +1,18 @@
-import uuid
-from collections import Counter
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
+from app.adapters.base import ResumeStore
+from app.adapters.resume_store import get_resume_store
 from app.api import fixtures
-from app.api.deps import get_current_recruiter, get_owned_job
+from app.api.deps import get_current_recruiter, get_db, get_owned_job
 from app.core.config import settings
-from app.schemas.common import Page, PaginationParams, error_responses, paginate, pagination_params
+from app.models.job import JobPosting
+from app.models.recruiter import Recruiter
+from app.schemas.common import Page, PaginationParams, error_responses, pagination_params
 from app.schemas.enums import JobStatus, SubmissionStatus, TaskStatus
 from app.schemas.job import JobCreate, JobDetailOut, JobOut, JobUpdate
 from app.schemas.task import ProcessStatusOut, TaskOut
+from app.services import job_service
 
 router = APIRouter(
     prefix="/jobs",
@@ -23,24 +26,38 @@ def _apply_url(apply_slug: str) -> str:
     return f"{settings.public_apply_base_url}/{apply_slug}"
 
 
-def _submission_counts(job_id: uuid.UUID) -> dict[SubmissionStatus, int]:
-    counts = Counter(c["submission_status"] for c in fixtures.candidates_for_job(job_id))
-    return {status_: counts.get(status_, 0) for status_ in SubmissionStatus}
+def _submission_counts() -> dict[SubmissionStatus, int]:
+    return {status_: job_service.submission_count_placeholder() for status_ in SubmissionStatus}
 
 
-def _to_job_out(job: dict) -> JobOut:
+def _to_job_out(job: JobPosting) -> JobOut:
     return JobOut(
-        **job,
-        submission_count=len(fixtures.candidates_for_job(job["job_id"])),
+        job_id=job.job_id,
+        job_title=job.job_title,
+        status=job.status,
+        is_accepting_responses=job.is_accepting_responses,
+        expires_at=job.expires_at,
+        submission_count=job_service.submission_count_placeholder(),
+        created_at=job.created_at,
     )
 
 
-def _to_job_detail_out(job: dict) -> JobDetailOut:
+def _to_job_detail_out(job: JobPosting) -> JobDetailOut:
     return JobDetailOut(
-        **job,
-        submission_count=len(fixtures.candidates_for_job(job["job_id"])),
-        apply_url=_apply_url(job["apply_slug"]),
-        submission_counts=_submission_counts(job["job_id"]),
+        job_id=job.job_id,
+        job_title=job.job_title,
+        status=job.status,
+        is_accepting_responses=job.is_accepting_responses,
+        expires_at=job.expires_at,
+        submission_count=job_service.submission_count_placeholder(),
+        created_at=job.created_at,
+        job_description=job.job_description,
+        template_id=job.template_id,
+        apply_slug=job.apply_slug,
+        apply_url=_apply_url(job.apply_slug),
+        google_drive_folder_id=job.google_drive_folder_id,
+        updated_at=job.updated_at,
+        submission_counts=_submission_counts(),
     )
 
 
@@ -49,77 +66,49 @@ def list_jobs(
     status_filter: JobStatus | None = Query(default=None, alias="status"),
     q: str | None = Query(default=None),
     params: PaginationParams = Depends(pagination_params),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
 ) -> Page[JobOut]:
-    # STUB: US-06
-    jobs = list(fixtures.JOBS.values())
-    if status_filter is not None:
-        jobs = [j for j in jobs if j["status"] == status_filter]
-    if q:
-        jobs = [j for j in jobs if q.lower() in j["job_title"].lower()]
-    return paginate([_to_job_out(j) for j in jobs], params)
+    jobs, total = job_service.list_jobs(db, recruiter.recruiter_id, params, status_filter, q)
+    return Page[JobOut](
+        items=[_to_job_out(job) for job in jobs], total=total, page=params.page, size=params.size
+    )
 
 
 @router.post(
     "",
     response_model=JobDetailOut,
     status_code=status.HTTP_201_CREATED,
-    responses=error_responses(401, 422),
+    responses=error_responses(401, 404, 422, 502),
 )
-def create_job(payload: JobCreate) -> JobDetailOut:
-    # STUB: US-06 — real route creates the Drive folder, apply_slug, JD embedding.
-    template = fixtures.TEMPLATES.get(payload.template_id)
-    if template is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "TEMPLATE_NOT_FOUND", "message": "Template not found."},
-        )
-    job = {
-        "job_id": uuid.uuid4(),
-        "job_title": payload.job_title,
-        "job_description": payload.job_description,
-        "template_id": payload.template_id,
-        "status": JobStatus.LIVE,
-        "is_accepting_responses": True,
-        "expires_at": payload.expires_at,
-        "apply_slug": uuid.uuid4().hex[:16],
-        "google_drive_folder_id": None,
-        "created_at": fixtures.NOW,
-        "updated_at": fixtures.NOW,
-    }
+def create_job(
+    payload: JobCreate,
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+    store: ResumeStore = Depends(get_resume_store),
+) -> JobDetailOut:
+    job = job_service.create_job(db, recruiter, payload, store)
     return _to_job_detail_out(job)
 
 
 @router.get("/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404))
-def get_job(job: dict = Depends(get_owned_job)) -> JobDetailOut:
-    # STUB: US-06
+def get_job(job: JobPosting = Depends(get_owned_job)) -> JobDetailOut:
     return _to_job_detail_out(job)
 
 
 @router.patch(
-    "/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404, 409, 422)
+    "/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404, 409, 422, 502)
 )
-def update_job(payload: JobUpdate, job: dict = Depends(get_owned_job)) -> JobDetailOut:
-    # STUB: US-06/US-09 — closing a job is PATCH {"status": "CLOSED"}, no /close endpoint (ADR-004 P3).
-    updated = dict(job)
-    if payload.status is not None and payload.status != job["status"]:
-        if not fixtures.is_legal_job_transition(job["status"], payload.status):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "code": "INVALID_STATE_TRANSITION",
-                    "message": f"Cannot transition job from {job['status']} to {payload.status}.",
-                },
-            )
-        updated["status"] = payload.status
-    if payload.job_title is not None:
-        updated["job_title"] = payload.job_title
-    if payload.job_description is not None:
-        updated["job_description"] = payload.job_description
-    if payload.expires_at is not None:
-        updated["expires_at"] = payload.expires_at
-    if payload.is_accepting_responses is not None:
-        updated["is_accepting_responses"] = payload.is_accepting_responses
-    updated["updated_at"] = fixtures.NOW
+def update_job(
+    payload: JobUpdate,
+    job: JobPosting = Depends(get_owned_job),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+    store: ResumeStore = Depends(get_resume_store),
+) -> JobDetailOut:
+    # Closing a job is PATCH {"status": "CLOSED"}, no /close endpoint (ADR-004 P3).
+    # Retrying a failed launch is PATCH {"status": "LIVE"} on a DRAFT job.
+    updated = job_service.update_job(db, recruiter, job, payload, store)
     return _to_job_detail_out(updated)
 
 
@@ -129,10 +118,10 @@ def update_job(payload: JobUpdate, job: dict = Depends(get_owned_job)) -> JobDet
     status_code=status.HTTP_202_ACCEPTED,
     responses=error_responses(401, 404, 409),
 )
-def trigger_process(job: dict = Depends(get_owned_job)) -> TaskOut:
+def trigger_process(job: JobPosting = Depends(get_owned_job)) -> TaskOut:
     # STUB: US-15/US-16 — 409 unless CLOSED with candidates.
-    candidates = fixtures.candidates_for_job(job["job_id"])
-    if job["status"] != JobStatus.CLOSED or not candidates:
+    candidates = fixtures.candidates_for_job(job.job_id)
+    if job.status != JobStatus.CLOSED or not candidates:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -148,10 +137,10 @@ def trigger_process(job: dict = Depends(get_owned_job)) -> TaskOut:
     response_model=ProcessStatusOut,
     responses=error_responses(401, 404),
 )
-def process_status(job: dict = Depends(get_owned_job)) -> ProcessStatusOut:
+def process_status(job: JobPosting = Depends(get_owned_job)) -> ProcessStatusOut:
     # STUB: US-15/US-16 — total/processed/failed computed over candidates.submission_status.
     status_data = fixtures.PROCESS_STATUS_BY_JOB.get(
-        job["job_id"],
+        job.job_id,
         {
             "status": TaskStatus.PENDING,
             "total": 0,

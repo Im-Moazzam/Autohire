@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_owned_candidate, get_owned_job
+from app.models.job import JobPosting
 from app.schemas.candidate import (
     CandidateDetailOut,
     CandidateOut,
@@ -48,12 +49,12 @@ def _to_detail_out(candidate: dict) -> CandidateDetailOut:
 def list_candidates(
     submission_status: SubmissionStatus | None = Query(default=None),
     q: str | None = Query(default=None),
-    job: dict = Depends(get_owned_job),
+    job: JobPosting = Depends(get_owned_job),
     params: PaginationParams = Depends(pagination_params),
 ) -> Page[CandidateOut]:
     # STUB: US-13 — parse-failed candidates are a filter over this one collection
     # (?submission_status=PARSE_ERROR), never a second list (ADR-004 P2).
-    candidates = fixtures.candidates_for_job(job["job_id"])
+    candidates = fixtures.candidates_for_job(job.job_id)
     if submission_status is not None:
         candidates = [c for c in candidates if c["submission_status"] == submission_status]
     if q:
@@ -69,12 +70,12 @@ def list_candidates(
 def list_ranked_candidates(
     min_score: float | None = Query(default=None),
     skill: str | None = Query(default=None),
-    job: dict = Depends(get_owned_job),
+    job: JobPosting = Depends(get_owned_job),
     params: PaginationParams = Depends(pagination_params),
 ) -> Page[RankedCandidateOut]:
     # STUB: US-19
     candidates = [
-        c for c in fixtures.candidates_for_job(job["job_id"]) if c["rank_position"] is not None
+        c for c in fixtures.candidates_for_job(job.job_id) if c["rank_position"] is not None
     ]
     if min_score is not None:
         candidates = [c for c in candidates if (c["semantic_score"] or 0) >= min_score]

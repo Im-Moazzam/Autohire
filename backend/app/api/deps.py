@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 
 from app.api import fixtures
 from app.core.db import SessionLocal
+from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.models.template import FormTemplate
-from app.services import template_service
+from app.services import job_service, template_service
 from app.services.auth_service import SESSION_COOKIE, read_session_cookie
 
 _NOT_AUTHENTICATED = {"code": "NOT_AUTHENTICATED", "message": "not authenticated"}
@@ -44,10 +45,9 @@ def get_current_recruiter(
 def get_owned_job(
     job_id: uuid.UUID,
     recruiter: Recruiter = Depends(get_current_recruiter),
-) -> dict:
-    # STUB: US-06 — real query scopes by recruiter_id; signature is the contract,
-    # this body just validates the fixture exists.
-    job = fixtures.JOBS.get(job_id)
+    db: Session = Depends(get_db),
+) -> JobPosting:
+    job = job_service.get_job(db, recruiter.recruiter_id, job_id)
     if job is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

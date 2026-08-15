@@ -35,5 +35,10 @@ class Settings(BaseSettings):
         "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     )
 
+    # Where LocalResumeStore writes resume folders (APP_ENV=local). Defaults to
+    # the docker-compose mount; not every process runs in that container (CI,
+    # a host .venv), so this must be overridable rather than hardcoded.
+    local_storage_root: str = "/storage"
+
 
 settings = Settings()

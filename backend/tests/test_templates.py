@@ -1,9 +1,11 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.main import app
+from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.models.template import FormTemplate
 from app.services.auth_service import SESSION_COOKIE, create_session_cookie
@@ -228,6 +230,46 @@ def test_list_templates_only_returns_callers_templates(
     response = other_client.get("/api/v1/templates")
     assert response.status_code == 200
     assert response.json()["total"] == 0
+
+
+def _create_live_job(client: TestClient, template_id: str) -> dict:
+    response = client.post(
+        "/api/v1/jobs",
+        json={
+            "job_title": "Role",
+            "job_description": "Desc",
+            "template_id": template_id,
+            "expires_at": "2027-01-01T00:00:00Z",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+# TC-10
+def test_delete_template_referenced_by_live_job_is_409(authed_client: TestClient) -> None:
+    template = _create(authed_client, "In Use")
+    _create_live_job(authed_client, template["template_id"])
+
+    response = authed_client.delete(f"/api/v1/templates/{template['template_id']}")
+    assert response.status_code == 409
+    assert response.json()["code"] == "TEMPLATE_IN_USE"
+
+
+# TC-11
+def test_delete_template_whose_only_job_is_soft_deleted_is_204(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    template = _create(authed_client, "Once used")
+    job = _create_live_job(authed_client, template["template_id"])
+
+    row = db_session.get(JobPosting, uuid.UUID(job["job_id"]))
+    assert row is not None
+    row.deleted_at = datetime.now(UTC)
+    db_session.commit()
+
+    response = authed_client.delete(f"/api/v1/templates/{template['template_id']}")
+    assert response.status_code == 204
 
 
 def test_put_keeps_existing_field_id(authed_client: TestClient) -> None:

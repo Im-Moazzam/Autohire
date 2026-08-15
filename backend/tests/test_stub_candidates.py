@@ -1,9 +1,12 @@
 from fastapi.testclient import TestClient
 
 from app.api import fixtures
+from app.models.job import JobPosting
 
 
-def test_tc08_filter_by_parse_error(authed_client: TestClient) -> None:
+def test_tc08_filter_by_parse_error(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.get(
         f"/api/v1/jobs/{fixtures.JOB_LIVE_ID}/candidates",
         params={"submission_status": "PARSE_ERROR"},
@@ -15,7 +18,9 @@ def test_tc08_filter_by_parse_error(authed_client: TestClient) -> None:
     assert all(item["parse_error"] is not None for item in body["items"])
 
 
-def test_ranked_candidates_are_sorted_and_scored(authed_client: TestClient) -> None:
+def test_ranked_candidates_are_sorted_and_scored(
+    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+) -> None:
     response = authed_client.get(f"/api/v1/jobs/{fixtures.JOB_LIVE_ID}/candidates/ranked")
     assert response.status_code == 200
     body = response.json()
