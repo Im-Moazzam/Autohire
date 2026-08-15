@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -10,7 +11,8 @@ from app.api.deps import get_db
 from app.core.db import SessionLocal
 from app.main import app
 from app.models.api_usage_log import ApiUsageLog
-from app.models.recruiter import Recruiter
+from app.models.recruiter import Recruiter, RecruiterState
+from app.models.template import FormTemplate
 
 
 @pytest.fixture
@@ -18,6 +20,7 @@ def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
     session.query(ApiUsageLog).delete()
+    session.query(FormTemplate).delete()
     session.query(Recruiter).delete()
     session.commit()
     session.close()
@@ -68,3 +71,23 @@ def authed_client(client: TestClient) -> TestClient:
             follow_redirects=False,
         )
     return client
+
+
+@pytest.fixture
+def second_recruiter(db_session: Session) -> Recruiter:
+    """A second recruiter row, inserted directly (no login flow needed), so
+    cross-tenant tests (TC-08) can prove one recruiter's template is 404 for
+    another without depending on `authed_client`'s identity."""
+    recruiter = Recruiter(
+        google_user_id="stub-recruiter-2-sub",
+        email="stub-recruiter-2@example.com",
+        full_name="Stub Recruiter Two",
+        google_access_token="fake-access-token-2",
+        google_token_expires_at=datetime.now(UTC) + timedelta(hours=1),
+        granted_scopes=[],
+        account_state=RecruiterState.ACTIVE,
+    )
+    db_session.add(recruiter)
+    db_session.commit()
+    db_session.refresh(recruiter)
+    return recruiter

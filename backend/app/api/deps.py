@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from app.api import fixtures
 from app.core.db import SessionLocal
 from app.models.recruiter import Recruiter
+from app.models.template import FormTemplate
+from app.services import template_service
 from app.services.auth_service import SESSION_COOKIE, read_session_cookie
 
 _NOT_AUTHENTICATED = {"code": "NOT_AUTHENTICATED", "message": "not authenticated"}
@@ -71,9 +73,9 @@ def get_owned_candidate(
 def get_owned_template(
     template_id: uuid.UUID,
     recruiter: Recruiter = Depends(get_current_recruiter),
-) -> dict:
-    # STUB: US-04 — real query scopes by recruiter_id.
-    template = fixtures.TEMPLATES.get(template_id)
+    db: Session = Depends(get_db),
+) -> FormTemplate:
+    template = template_service.get_template(db, recruiter.recruiter_id, template_id)
     if template is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
