@@ -19,10 +19,10 @@ const devRoutes = import.meta.env.DEV
   : [];
 
 export const router = createBrowserRouter([
+  { path: "/", element: <Home /> },
   {
     element: <AppShell />,
     children: [
-      { path: "/", element: <Home /> },
       { path: "/dashboard", element: <Dashboard /> },
       { path: "/auth/error", element: <AuthError /> },
     ],

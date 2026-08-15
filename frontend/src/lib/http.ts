@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
+export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
   status: number;
@@ -15,6 +15,10 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
+    // The session cookie is httponly and set by the API's origin (:8000),
+    // separate from the frontend's (:5173) — without this, /auth/me and
+    // every other authenticated call silently looks logged-out.
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       ...init?.headers,
