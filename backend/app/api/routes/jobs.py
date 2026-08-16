@@ -26,30 +26,28 @@ def _apply_url(apply_slug: str) -> str:
     return f"{settings.public_apply_base_url}/{apply_slug}"
 
 
-def _submission_counts() -> dict[SubmissionStatus, int]:
-    return {status_: job_service.submission_count_placeholder() for status_ in SubmissionStatus}
-
-
-def _to_job_out(job: JobPosting) -> JobOut:
+def _to_job_out(job: JobPosting, submission_count: int) -> JobOut:
     return JobOut(
         job_id=job.job_id,
         job_title=job.job_title,
         status=job.status,
         is_accepting_responses=job.is_accepting_responses,
         expires_at=job.expires_at,
-        submission_count=job_service.submission_count_placeholder(),
+        submission_count=submission_count,
         created_at=job.created_at,
     )
 
 
-def _to_job_detail_out(job: JobPosting) -> JobDetailOut:
+def _to_job_detail_out(
+    job: JobPosting, submission_counts: dict[SubmissionStatus, int]
+) -> JobDetailOut:
     return JobDetailOut(
         job_id=job.job_id,
         job_title=job.job_title,
         status=job.status,
         is_accepting_responses=job.is_accepting_responses,
         expires_at=job.expires_at,
-        submission_count=job_service.submission_count_placeholder(),
+        submission_count=sum(submission_counts.values()),
         created_at=job.created_at,
         job_description=job.job_description,
         template_id=job.template_id,
@@ -57,7 +55,7 @@ def _to_job_detail_out(job: JobPosting) -> JobDetailOut:
         apply_url=_apply_url(job.apply_slug),
         google_drive_folder_id=job.google_drive_folder_id,
         updated_at=job.updated_at,
-        submission_counts=_submission_counts(),
+        submission_counts=submission_counts,
     )
 
 
@@ -70,8 +68,12 @@ def list_jobs(
     db: Session = Depends(get_db),
 ) -> Page[JobOut]:
     jobs, total = job_service.list_jobs(db, recruiter.recruiter_id, params, status_filter, q)
+    counts = job_service.submission_counts_by_job(db, [job.job_id for job in jobs])
     return Page[JobOut](
-        items=[_to_job_out(job) for job in jobs], total=total, page=params.page, size=params.size
+        items=[_to_job_out(job, counts.get(job.job_id, 0)) for job in jobs],
+        total=total,
+        page=params.page,
+        size=params.size,
     )
 
 
@@ -88,12 +90,14 @@ def create_job(
     store: ResumeStore = Depends(get_resume_store),
 ) -> JobDetailOut:
     job = job_service.create_job(db, recruiter, payload, store)
-    return _to_job_detail_out(job)
+    return _to_job_detail_out(job, job_service.submission_counts_by_status(db, job.job_id))
 
 
 @router.get("/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404))
-def get_job(job: JobPosting = Depends(get_owned_job)) -> JobDetailOut:
-    return _to_job_detail_out(job)
+def get_job(
+    job: JobPosting = Depends(get_owned_job), db: Session = Depends(get_db)
+) -> JobDetailOut:
+    return _to_job_detail_out(job, job_service.submission_counts_by_status(db, job.job_id))
 
 
 @router.patch(
@@ -109,7 +113,7 @@ def update_job(
     # Closing a job is PATCH {"status": "CLOSED"}, no /close endpoint (ADR-004 P3).
     # Retrying a failed launch is PATCH {"status": "LIVE"} on a DRAFT job.
     updated = job_service.update_job(db, recruiter, job, payload, store)
-    return _to_job_detail_out(updated)
+    return _to_job_detail_out(updated, job_service.submission_counts_by_status(db, updated.job_id))
 
 
 @router.post(
