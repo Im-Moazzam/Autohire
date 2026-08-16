@@ -21,11 +21,23 @@ def _create_template(client: TestClient, name: str = "Standard Software Role") -
             "template_name": name,
             "fields": [
                 {
+                    "field_label": "Email",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 0,
+                },
+                {
+                    "field_label": "Full Name",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 1,
+                },
+                {
                     "field_label": "Years of experience",
                     "field_type": "NUMBER",
                     "is_required": True,
-                    "field_order": 0,
-                }
+                    "field_order": 2,
+                },
             ],
         },
     )

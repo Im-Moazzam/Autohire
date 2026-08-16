@@ -29,6 +29,18 @@ def _create_template_with_dropdown(client: TestClient) -> dict:
                     "field_order": 0,
                     "options": ["Junior", "Mid", "Senior"],
                 },
+                {
+                    "field_label": "Email",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 2,
+                },
+                {
+                    "field_label": "Full Name",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 3,
+                },
             ],
         },
     )
