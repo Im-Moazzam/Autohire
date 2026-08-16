@@ -3,9 +3,10 @@ from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, Boolean, Enum, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
+from app.models.template import FormTemplate
 from app.schemas.enums import JobStatus
 
 
@@ -48,3 +49,5 @@ class JobPosting(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
+
+    template: Mapped[FormTemplate] = relationship(viewonly=True)

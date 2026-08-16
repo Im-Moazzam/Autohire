@@ -52,11 +52,13 @@ these. Summary:
   for cases where ownership is already established but the action isn't permitted.
 - Timestamps: ISO 8601 UTC.
 
-Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTING` (409),
-`DUPLICATE_SUBMISSION` (409), `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413),
-`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409),
-`TEMPLATE_IN_USE` (409), `DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401),
-`VALIDATION_ERROR` (422, ADR-004 P9).
+Key error codes: `REAUTH_REQUIRED` (409), `JOB_CLOSED` (410), `DUPLICATE_SUBMISSION` (409),
+`UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413), `QUOTA_EXCEEDED` (503),
+`TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409), `TEMPLATE_IN_USE` (409),
+`DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9).
+`JOB_CLOSED` (US-11) replaces the earlier `JOB_EXPIRED`/`JOB_NOT_ACCEPTING` split — one
+code, `details: {job_title, reason}` where `reason` is `CLOSED | EXPIRED | PAUSED`, so
+the frontend still knows which of the three gating conditions failed without three codes.
 Per-resource `{RESOURCE}_NOT_FOUND` codes (`JOB_NOT_FOUND`, `CANDIDATE_NOT_FOUND`, etc.)
 follow the obvious pattern and aren't enumerated individually.
 
@@ -130,7 +132,7 @@ ambiguous.
 ## Public — no auth
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. 410 if expired |
+| GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. Unknown slug, soft-deleted, or DRAFT → 404. CLOSED/paused/expired → 410 `JOB_CLOSED` |
 | POST | `/api/v1/public/apply/{apply_slug}` | multipart. Rate-limited by IP |
 
 The only two unauthenticated endpoints in the system, mounted as a separate

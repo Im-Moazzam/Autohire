@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- US-11: `GET /public/apply/{apply_slug}` — the first unauthenticated, no-session
+  endpoint in the system — is real. `job_service.get_job_by_slug` looks up by
+  `apply_slug` only (never `job_id`), scoped to non-deleted rows, and
+  `assert_job_accepting` holds the single three-condition check
+  (`LIVE AND is_accepting_responses AND now < expires_at`) that US-12 will call
+  before writing a submission. Unknown slug, soft-deleted, and DRAFT jobs all
+  404 identically — a draft is unlaunched, not closed, and a distinguishable
+  response would leak that a posting exists before the recruiter shares it.
+  CLOSED/paused/expired jobs 410 with a new `JOB_CLOSED` code carrying
+  `details: {job_title, reason}` (`reason` ∈ `CLOSED | EXPIRED | PAUSED`),
+  replacing the earlier `JOB_EXPIRED`/`JOB_NOT_ACCEPTING` split (`docs/drift.md`
+  rows 30–31). Raised as a new `JobNotAccepting` domain exception
+  (`app/core/exceptions.py`), mapped to 410 by one handler in `main.py` —
+  same pattern as `ReauthRequired` — so the check stays callable outside a
+  FastAPI route. `PublicJobOut` exposes only `job_title`, `job_description`,
+  `fields`, `is_accepting_responses`, `expires_at`; `TemplateFieldOut.field_id`
+  is the one UUID that survives, deliberately, as the FK key US-12's submission
+  payload needs.
 - US-06: Job launch gets real persistence, the first `google_call`-backed route,
   and the first resource adapter. `job_postings` migration (`job_status_enum`,
   UNIQUE `apply_slug`, `(recruiter_id, status)` index, partial index on

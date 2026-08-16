@@ -5,12 +5,14 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.adapters.base import ResumeStore
 from app.core.config import settings
+from app.core.exceptions import JobNotAccepting
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
+from app.models.template import FormTemplate
 from app.schemas.common import PaginationParams
 from app.schemas.enums import JobStatus
 from app.schemas.job import JobCreate, JobUpdate
@@ -80,6 +82,32 @@ def get_job(db: Session, recruiter_id: uuid.UUID, job_id: uuid.UUID) -> JobPosti
             JobPosting.deleted_at.is_(None),
         )
     )
+
+
+def get_job_by_slug(db: Session, apply_slug: str) -> JobPosting | None:
+    """Public lookup — deliberately NOT scoped by recruiter_id. The caller is
+    unauthenticated and the slug IS the capability (US-06); there is no
+    recruiter identity to scope by. Soft-deleted rows are excluded, so a
+    deleted job is indistinguishable from an unknown slug."""
+    return db.scalar(
+        select(JobPosting)
+        .where(JobPosting.apply_slug == apply_slug, JobPosting.deleted_at.is_(None))
+        .options(selectinload(JobPosting.template).selectinload(FormTemplate.fields))
+    )
+
+
+def assert_job_accepting(job: JobPosting) -> None:
+    """LIVE AND is_accepting_responses AND now < expires_at — all three,
+    evaluated per request. US-06 deliberately leaves an expired job LIVE
+    (US-08 owns the status transition), so expiry is never inferred from
+    status. US-12 calls this before writing a submission; do not inline a
+    second copy of this check."""
+    if job.status != JobStatus.LIVE:
+        raise JobNotAccepting(job.job_title, "CLOSED")
+    if datetime.now(UTC) >= job.expires_at:
+        raise JobNotAccepting(job.job_title, "EXPIRED")
+    if not job.is_accepting_responses:
+        raise JobNotAccepting(job.job_title, "PAUSED")
 
 
 def job_references_template(db: Session, template_id: uuid.UUID) -> bool:

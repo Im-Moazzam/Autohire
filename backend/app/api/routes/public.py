@@ -2,25 +2,30 @@
 these are the only two unauthenticated endpoints in the system. A test in
 tests/test_stub_public.py inspects this router's routes to assert that stays true."""
 
-from datetime import UTC, datetime
-
-from fastapi import APIRouter, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from sqlalchemy.orm import Session
 
 from app.api import fixtures
+from app.api.deps import get_db
+from app.models.job import JobPosting
 from app.schemas.common import error_responses
+from app.schemas.enums import JobStatus
 from app.schemas.public import ApplySuccessOut, PublicJobOut
+from app.services import job_service
 
 router = APIRouter(prefix="/public", tags=["public"])
 
+_JOB_NOT_FOUND = {"code": "JOB_NOT_FOUND", "message": "No job found for that link."}
 
-def _job_by_slug(apply_slug: str) -> dict:
-    for job in fixtures.JOBS.values():
-        if job["apply_slug"] == apply_slug:
-            return job
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail={"code": "JOB_NOT_FOUND", "message": "No job found for that link."},
-    )
+
+def _get_public_job(db: Session, apply_slug: str) -> JobPosting:
+    """Unknown slug, soft-deleted, and DRAFT all 404 identically — a draft is
+    not "closed", it's unlaunched, and a distinguishable response would leak
+    that a posting exists before the recruiter has shared it."""
+    job = job_service.get_job_by_slug(db, apply_slug)
+    if job is None or job.status == JobStatus.DRAFT:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_JOB_NOT_FOUND)
+    return job
 
 
 @router.get(
@@ -28,29 +33,15 @@ def _job_by_slug(apply_slug: str) -> dict:
     response_model=PublicJobOut,
     responses=error_responses(404, 410),
 )
-def get_public_job(apply_slug: str) -> PublicJobOut:
-    # STUB: US-11
-    job = _job_by_slug(apply_slug)
-    if job["expires_at"] < datetime.now(UTC):
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail={"code": "JOB_EXPIRED", "message": "This application link has expired."},
-        )
-    if job["status"] != "LIVE" or not job["is_accepting_responses"]:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail={
-                "code": "JOB_NOT_ACCEPTING",
-                "message": "This job is not currently accepting applications.",
-            },
-        )
-    template = fixtures.TEMPLATES[job["template_id"]]
+def get_public_job(apply_slug: str, db: Session = Depends(get_db)) -> PublicJobOut:
+    job = _get_public_job(db, apply_slug)
+    job_service.assert_job_accepting(job)
     return PublicJobOut(
-        job_title=job["job_title"],
-        job_description=job["job_description"],
-        fields=template["fields"],
-        is_accepting_responses=job["is_accepting_responses"],
-        expires_at=job["expires_at"],
+        job_title=job.job_title,
+        job_description=job.job_description,
+        fields=job.template.fields,
+        is_accepting_responses=job.is_accepting_responses,
+        expires_at=job.expires_at,
     )
 
 
@@ -60,24 +51,14 @@ def get_public_job(apply_slug: str) -> PublicJobOut:
     status_code=status.HTTP_201_CREATED,
     responses=error_responses(404, 410, 413, 415),
 )
-def submit_application(apply_slug: str, resume: UploadFile) -> ApplySuccessOut:
+def submit_application(
+    apply_slug: str, resume: UploadFile, db: Session = Depends(get_db)
+) -> ApplySuccessOut:
     # STUB: US-12 — real route validates file type by magic bytes, caps at 5MB,
     # rate-limits by IP, and persists the candidate + form responses. 413/415 are
     # declared above but not enforced yet, so the client is typed for that story.
-    job = _job_by_slug(apply_slug)
-    if job["expires_at"] < datetime.now(UTC):
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail={"code": "JOB_EXPIRED", "message": "This application link has expired."},
-        )
-    if job["status"] != "LIVE" or not job["is_accepting_responses"]:
-        raise HTTPException(
-            status_code=status.HTTP_410_GONE,
-            detail={
-                "code": "JOB_NOT_ACCEPTING",
-                "message": "This job is not currently accepting applications.",
-            },
-        )
+    job = _get_public_job(db, apply_slug)
+    job_service.assert_job_accepting(job)
     return ApplySuccessOut(
         submitted_at=fixtures.NOW,
         message="Application received.",
