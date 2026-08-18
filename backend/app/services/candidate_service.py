@@ -1,18 +1,23 @@
 import uuid
+from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
 from app.adapters.base import ResumeStore
+from app.adapters.resume_store import local_job_folder
 from app.core.config import settings
 from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
-from app.schemas.enums import FieldType
+from app.models.template import TemplateField
+from app.schemas.candidate import FormResponseOut
+from app.schemas.common import PaginationParams
+from app.schemas.enums import FieldType, SubmissionStatus
 from app.services import job_service
 from app.services.identity_fields import resolve_identity_fields
 from app.services.resume_validation import EmptyFile, FileTooLarge, read_capped, sniff_extension
@@ -207,3 +212,96 @@ def submit_application(
         raise HTTPException(status_code=409, detail=_DUPLICATE_SUBMISSION) from None
     db.refresh(candidate)
     return candidate
+
+
+def list_candidates(
+    db: Session,
+    job_id: uuid.UUID,
+    params: PaginationParams,
+    submission_status: SubmissionStatus | None,
+    q: str | None,
+) -> tuple[list[Candidate], int]:
+    """Mirrors job_service.list_jobs: a COUNT over the filtered subquery, then
+    one bounded page. Never touches candidate_form_responses or template_fields
+    — CandidateOut carries no form_responses — so this stays 1 query
+    regardless of page size (TC-10)."""
+    base = select(Candidate).where(Candidate.job_id == job_id, Candidate.deleted_at.is_(None))
+    if submission_status is not None:
+        # Hits ix_candidates_job_status (job_id, submission_status).
+        base = base.where(Candidate.submission_status == submission_status)
+    if q:
+        base = base.where(or_(Candidate.full_name.ilike(f"%{q}%"), Candidate.email.ilike(f"%{q}%")))
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(
+        base.order_by(Candidate.submitted_at.desc(), Candidate.candidate_id.desc())
+        .offset((params.page - 1) * params.size)
+        .limit(params.size)
+    ).all()
+    return list(rows), total
+
+
+def get_owned_candidate(
+    db: Session, recruiter_id: uuid.UUID, candidate_id: uuid.UUID
+) -> Candidate | None:
+    """The only ownership path for candidates — scoped through the owning job's
+    recruiter_id in one query, never a two-step lookup. Cross-tenant, deleted
+    candidate, or deleted job all resolve to None here (ADR-004 P8: 404, not 403)."""
+    return db.scalar(
+        select(Candidate)
+        .join(JobPosting, JobPosting.job_id == Candidate.job_id)
+        .where(
+            Candidate.candidate_id == candidate_id,
+            Candidate.deleted_at.is_(None),
+            JobPosting.recruiter_id == recruiter_id,
+            JobPosting.deleted_at.is_(None),
+        )
+    )
+
+
+def form_responses(db: Session, candidate_id: uuid.UUID) -> list[FormResponseOut]:
+    """One query, joined to template_fields for the label — never stored on
+    the response row (AC), and never a per-response lookup (TC-10)."""
+    rows = db.execute(
+        select(CandidateFormResponse, TemplateField)
+        .join(TemplateField, TemplateField.field_id == CandidateFormResponse.field_id)
+        .where(CandidateFormResponse.candidate_id == candidate_id)
+        .order_by(TemplateField.field_order)
+    ).all()
+    return [
+        FormResponseOut(
+            field_id=field.field_id,
+            field_label=field.field_label,
+            field_type=field.field_type,
+            response_value=response.response_value,
+        )
+        for response, field in rows
+    ]
+
+
+def resume_url_for(candidate: Candidate) -> str | None:
+    """Computed, never a column (docs/schema.md). Local mode never exposes the
+    filesystem path — it points at the authenticated download route instead;
+    cloud mode is the Drive webViewLink. Opaque to the client either way."""
+    if settings.app_env == "local":
+        if not candidate.resume_storage_key:
+            return None
+        return f"/api/v1/candidates/{candidate.candidate_id}/resume"
+    return candidate.resume_drive_url
+
+
+def resolve_resume_path(candidate: Candidate) -> Path | None:
+    """Resolves resume_storage_key for streaming. Local mode only — in cloud
+    mode resume_storage_key is always None (candidate_service.submit_application
+    only sets it when app_env == "local"), so this always returns None there and
+    the route 404s, matching resume_url_for's local-only route. Returns None
+    (never raises) for: no key stored, file missing, or the resolved path
+    escaping the job's folder — the route maps all three to 404 uniformly."""
+    if not candidate.resume_storage_key:
+        return None
+    folder = local_job_folder(candidate.job_id).resolve()
+    target = Path(candidate.resume_storage_key).resolve()
+    if folder not in target.parents:
+        return None
+    if not target.is_file():
+        return None
+    return target
