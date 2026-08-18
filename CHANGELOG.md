@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+- US-15/16: `resume_parser.extract_text` glued icon-font glyphs directly onto
+  adjacent words (e.g. a phone number rendered as an unrenderable codepoint
+  immediately followed by the digits, no whitespace) — found on a real resume
+  during the manual live-worker smoke test that `task_always_eager` unit tests
+  can't reach. Icon fonts (phone/email/location pictograms, common in resume
+  templates) map their glyphs into the Unicode Private Use Areas; `pypdf`
+  faithfully returns whatever codepoint the font's cmap gives it, but there is
+  no real character behind it. Now stripped to a space (not deleted outright,
+  so words don't glue together) before the `MIN_CHARS` check. Left in, this
+  would have quietly degraded US-18's embeddings on every resume built from a
+  template using an icon font.
+
 ### Added
 - US-15/16 (commit 2 — extraction): the `RESUME_PARSE` task's per-candidate body is
   real. `app/services/resume_parser.py` — `extract_text(content, ext) -> str`,

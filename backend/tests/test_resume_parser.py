@@ -16,6 +16,18 @@ def test_extracts_text_from_real_pdf() -> None:
     assert len(text.strip()) >= 50
 
 
+def test_real_pdf_strips_icon_font_glyph_artifacts() -> None:
+    # This fixture's icon font (phone/location/email pictograms) maps into
+    # the Private Use Area; pypdf returns the raw codepoint with no
+    # whitespace around it, gluing onto the adjacent word (a real
+    # extraction-quality bug found via manual smoke testing on this file,
+    # not a synthetic case).
+    text = extract_text(_read("Moazzam_Resume.pdf"), "pdf")
+    assert not any(0xE000 <= ord(ch) <= 0xF8FF for ch in text)
+    assert "+923228032990" in text
+    assert "moazzamaleem786@gmail.com" in text
+
+
 def test_extracts_text_from_real_docx() -> None:
     text = extract_text(_read("word_doc_resume.docx"), "docx")
     assert len(text.strip()) >= 50
