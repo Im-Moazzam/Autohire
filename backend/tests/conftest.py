@@ -5,13 +5,14 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.adapters.google.oauth import GoogleTokens, GoogleUserInfo
 from app.api import fixtures
 from app.api.deps import get_db
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, engine
 from app.main import app
 from app.models.api_usage_log import ApiUsageLog
 from app.models.candidate import Candidate, CandidateFormResponse
@@ -131,6 +132,28 @@ def seeded_stub_jobs(authed_client: TestClient, db_session: Session) -> list[Job
         jobs.append(row)
     db_session.commit()
     return jobs
+
+
+class QueryCounter:
+    def __init__(self) -> None:
+        self.count = 0
+
+
+@pytest.fixture
+def query_counter() -> Generator[QueryCounter, None, None]:
+    """TC-10: counts statements executed against the engine while the fixture
+    is active, so a test can assert a route issues a bounded, page-size-
+    independent number of queries (never an N+1 over a per-row loop)."""
+    counter = QueryCounter()
+
+    def _on_execute(*args: object, **kwargs: object) -> None:
+        counter.count += 1
+
+    event.listen(engine, "before_cursor_execute", _on_execute)
+    try:
+        yield counter
+    finally:
+        event.remove(engine, "before_cursor_execute", _on_execute)
 
 
 @pytest.fixture

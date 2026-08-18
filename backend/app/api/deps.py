@@ -4,12 +4,12 @@ from collections.abc import Generator
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api import fixtures
 from app.core.db import SessionLocal
+from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.models.template import FormTemplate
-from app.services import job_service, template_service
+from app.services import candidate_service, job_service, template_service
 from app.services.auth_service import SESSION_COOKIE, read_session_cookie
 
 _NOT_AUTHENTICATED = {"code": "NOT_AUTHENTICATED", "message": "not authenticated"}
@@ -59,9 +59,9 @@ def get_owned_job(
 def get_owned_candidate(
     candidate_id: uuid.UUID,
     recruiter: Recruiter = Depends(get_current_recruiter),
-) -> dict:
-    # STUB: US-13 — real query scopes by recruiter_id via the owning job.
-    candidate = fixtures.CANDIDATES.get(candidate_id)
+    db: Session = Depends(get_db),
+) -> Candidate:
+    candidate = candidate_service.get_owned_candidate(db, recruiter.recruiter_id, candidate_id)
     if candidate is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

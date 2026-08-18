@@ -163,9 +163,11 @@ UNIQUE (job_id, email) — prevents double submission to the same posting. **Par
 soft-deleted candidate frees its email for re-application (landed in US-12).
 
 `resume_url` in API responses (`CandidateOut`) is a computed field, not a stored
-column — derived from `resume_drive_url` when `APP_ENV != local` or from
-`resume_storage_key` when `APP_ENV == local`. Clients never construct this URL
-themselves; they read whichever value the response layer resolved.
+column — `resume_drive_url` when `APP_ENV != local`, or `GET /candidates/{id}/resume`
+(US-13) when `APP_ENV == local`. `resume_storage_key` itself never reaches a client;
+it is an absolute server path, opened only by the download route after resolving it
+inside the job's resume folder. Clients never construct `resume_url` themselves; they
+read whichever value the response layer resolved.
 
 ### candidate_form_responses (weak)
 | Column | Type | Notes |

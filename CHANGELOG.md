@@ -3,6 +3,35 @@
 ## [Unreleased]
 
 ### Added
+- US-13: `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, and
+  `PATCH /candidates/{id}` swap their TS-02 fixture stubs for real queries — the
+  first time a recruiter can see what's actually been submitted. Closes a live
+  tenant-isolation gap along the way: `deps.get_owned_candidate` previously
+  resolved a candidate from an in-memory dict with **no `recruiter_id` scoping at
+  all**; it's now one query joined through the owning job, the only ownership path
+  for candidates.
+
+  List and detail are both bounded regardless of page size or answer count — the
+  list response carries no `form_responses`, so it never touches
+  `candidate_form_responses` or `template_fields`; the detail route joins both in
+  one query rather than resolving each response's `field_label` individually.
+  `?submission_status=` hits `ix_candidates_job_status`; `?q=` does an
+  `ILIKE` over name/email, consistent with `list_jobs`.
+
+  New route, not in the TS-02 contract (`docs/drift.md` row 37):
+  `GET /candidates/{id}/resume` — authenticated, ownership-scoped, streams the
+  file from `LOCAL_STORAGE_ROOT` after asserting the resolved path is inside the
+  job's folder (defence in depth, same precedent as US-12). **Local mode only** —
+  `resume_storage_key` is always NULL in cloud mode, so the route inertly 404s
+  there and `resume_url` resolves to the Drive `webViewLink` instead; no redirect
+  variant was built. `resume_url` is opaque to the client in either mode.
+  `Content-Disposition` uses the server-generated stored filename, never anything
+  candidate-supplied, and defaults to `attachment` — a malicious PDF can't execute
+  in the recruiter's browser origin.
+
+  `PATCH /candidates/{id}` accepts any valid `submission_status` with no legality
+  graph (drift row 38) — candidates have no defined transition rules, unlike jobs.
+
 - US-12: `POST /public/apply/{apply_slug}` is real — the biggest attack surface in
   the system, unauthenticated and accepting a file upload. `candidates` and
   `candidate_form_responses` migration per `docs/schema.md`, with a **partial**

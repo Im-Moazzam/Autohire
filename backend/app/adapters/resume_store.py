@@ -18,18 +18,22 @@ _MIME_BY_EXT = {
 }
 
 
+def local_job_folder(job_id: uuid.UUID) -> Path:
+    # Read settings.local_storage_root at call time, not import time, so
+    # tests can point it at a tmp_path without touching the host filesystem.
+    return Path(settings.local_storage_root) / "resumes" / str(job_id)
+
+
 class LocalResumeStore:
     def create_job_folder(self, recruiter: Recruiter, job_id: uuid.UUID, name: str) -> str:
-        # Read settings.local_storage_root at call time, not import time, so
-        # tests can point it at a tmp_path without touching the host filesystem.
-        path = Path(settings.local_storage_root) / "resumes" / str(job_id)
+        path = local_job_folder(job_id)
         path.mkdir(parents=True, exist_ok=True)
         return str(path)
 
     def store_resume(
         self, recruiter: Recruiter, job: JobPosting, filename: str, content: bytes
     ) -> StoredFile:
-        folder = Path(settings.local_storage_root) / "resumes" / str(job.job_id)
+        folder = local_job_folder(job.job_id)
         folder.mkdir(parents=True, exist_ok=True)
         target = (folder / filename).resolve()
         # Defence in depth: filename is always server-generated (uuid4 + a

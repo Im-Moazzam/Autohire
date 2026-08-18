@@ -176,9 +176,16 @@ when wiring frontend links.
 | GET | `/jobs/{id}/candidates` | raw submissions, `Page[CandidateOut]`, dynamic columns; `?submission_status=` |
 | GET | `/jobs/{id}/candidates/ranked` | `Page[RankedCandidateOut]`, sorted by `rank_position`; `?min_score=&skill=` |
 | GET | `/candidates/{id}` | profile + responses + AI result + resume URL |
+| GET | `/candidates/{id}/resume` | US-13, not in the original TS-02 contract (drift row 37). Authenticated, ownership-scoped, streams the file. **Local mode only** — always 404 `RESUME_NOT_FOUND` in cloud mode |
 | GET | `/candidates/{id}/evidence` | Phase 2 (US-23) — out of scope |
 | GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8) |
 | PATCH | `/candidates/{id}` | status changes |
+
+`resume_url` (`CandidateOut`) is opaque to the client in either mode — the frontend
+renders it as a link without caring which it is. In cloud mode it's the Drive
+`webViewLink`; in local mode it's `GET /candidates/{id}/resume`, never the raw
+`resume_storage_key` path. The download route has no cloud-mode behaviour of its own
+(no redirect) because `resume_storage_key` is always NULL there — see drift row 37.
 
 Candidates that failed parsing are **not** a second list embedded in the ranked
 response. They're retrieved from `GET /jobs/{id}/candidates?submission_status=PARSE_ERROR`
