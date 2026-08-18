@@ -3,6 +3,38 @@
 ## [Unreleased]
 
 ### Added
+- US-15/16 (commit 1 — task plumbing): `POST /jobs/{job_id}/process` and
+  `GET /jobs/{job_id}/process/status` swap their TS-02 fixture stubs for a real Celery
+  task. `background_tasks` migration (`task_type_enum`/`task_status_enum` per
+  `docs/schema.md`) plus a partial UNIQUE index on
+  `job_id WHERE task_type='RESUME_PARSE' AND status IN ('PENDING','RUNNING')` — the
+  actual concurrency guard behind 409 `PROCESSING_IN_PROGRESS`; the enqueue path's
+  pre-check (`task_service.active_task_for_job`) is only the fast path, same
+  precedent as US-12's `uq_candidates_job_email`. The row is written **on enqueue,
+  not on worker start** — committed before `.delay()` is ever called, so a
+  worker/broker that never picks up the job still leaves a trace (verified directly:
+  a test that makes `.delay()` raise still finds the row `PENDING`).
+
+  `app/tasks/resume_parse.py` — one `RESUME_PARSE` Celery task **per job**, not per
+  candidate, departing from `architecture.md`'s literal fan-out description
+  (`docs/drift.md`): every AC and test case in the story describes a single
+  `background_tasks` row per job. Opens its **own** `SessionLocal()`, never a
+  session passed in from a request — same rule `adapters/google/session.py`
+  follows. `acks_late=True`, `max_retries=3`, `soft_time_limit`, exponential
+  backoff; `autoretry_for` is scoped to transient infrastructure failures only
+  (`OperationalError` for now — commit 2 adds the Google-call transient case), never
+  broad exceptions, since per-candidate failures are handled in-loop and retrying on
+  them would redo already-completed work. Idempotency key is the task's own
+  `task_id`: re-running an already-terminal (`SUCCESS`/`FAILED`) task is a no-op.
+  Commit 1's per-candidate body is a placeholder (`_process_job_candidates` does
+  nothing yet) — real extraction lands in commit 2.
+
+  `GET /process/status` counts are computed from `candidates.submission_status`
+  rows, never from task state (AC) — `processed` sums every status downstream of a
+  successful parse, `failed` is `PARSE_ERROR`.
+
+  Tests run Celery eagerly (`celery_app.conf.task_always_eager`, opt-in per test via
+  a `celery_eager` fixture) — no live worker needed in CI.
 - US-13: `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, and
   `PATCH /candidates/{id}` swap their TS-02 fixture stubs for real queries — the
   first time a recruiter can see what's actually been submitted. Closes a live

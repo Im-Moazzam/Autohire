@@ -255,6 +255,11 @@ and let the UNIQUE constraint do the work — retries become harmless no-ops.
 Every Celery task writes a row here **on enqueue**, not on start. Otherwise a worker
 that dies before picking the job up leaves no trace, and US-34 has nothing to show.
 
+Implemented in US-15/16 (`RESUME_PARSE` only so far). One addition beyond this table:
+a partial UNIQUE index on `job_id WHERE task_type = 'RESUME_PARSE' AND status IN
+('PENDING', 'RUNNING')` — the actual concurrency guard behind the 409
+`PROCESSING_IN_PROGRESS` check, same precedent as `candidates`' partial unique index.
+
 ---
 
 ## Admin tables

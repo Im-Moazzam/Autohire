@@ -1,18 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.adapters.base import ResumeStore
 from app.adapters.resume_store import get_resume_store
-from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_db, get_owned_job
 from app.core.config import settings
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.schemas.common import Page, PaginationParams, error_responses, pagination_params
-from app.schemas.enums import JobStatus, SubmissionStatus, TaskStatus
+from app.schemas.enums import JobStatus, SubmissionStatus
 from app.schemas.job import JobCreate, JobDetailOut, JobOut, JobUpdate
 from app.schemas.task import ProcessStatusOut, TaskOut
-from app.services import job_service
+from app.services import job_service, task_service
 
 router = APIRouter(
     prefix="/jobs",
@@ -122,18 +121,13 @@ def update_job(
     status_code=status.HTTP_202_ACCEPTED,
     responses=error_responses(401, 404, 409),
 )
-def trigger_process(job: JobPosting = Depends(get_owned_job)) -> TaskOut:
-    # STUB: US-15/US-16 — 409 unless CLOSED with candidates.
-    candidates = fixtures.candidates_for_job(job.job_id)
-    if job.status != JobStatus.CLOSED or not candidates:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={
-                "code": "INVALID_STATE_TRANSITION",
-                "message": "Job must be CLOSED with candidates to process.",
-            },
-        )
-    return TaskOut(**fixtures.TASKS[fixtures.TASK_RUNNING_ID])
+def trigger_process(
+    job: JobPosting = Depends(get_owned_job),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> TaskOut:
+    task = task_service.enqueue_resume_parse(db, recruiter, job)
+    return TaskOut.model_validate(task)
 
 
 @router.get(
@@ -141,16 +135,7 @@ def trigger_process(job: JobPosting = Depends(get_owned_job)) -> TaskOut:
     response_model=ProcessStatusOut,
     responses=error_responses(401, 404),
 )
-def process_status(job: JobPosting = Depends(get_owned_job)) -> ProcessStatusOut:
-    # STUB: US-15/US-16 — total/processed/failed computed over candidates.submission_status.
-    status_data = fixtures.PROCESS_STATUS_BY_JOB.get(
-        job.job_id,
-        {
-            "status": TaskStatus.PENDING,
-            "total": 0,
-            "processed": 0,
-            "failed": 0,
-            "error_message": None,
-        },
-    )
-    return ProcessStatusOut(**status_data)
+def process_status(
+    job: JobPosting = Depends(get_owned_job), db: Session = Depends(get_db)
+) -> ProcessStatusOut:
+    return ProcessStatusOut(**task_service.process_status_for_job(db, job.job_id))
