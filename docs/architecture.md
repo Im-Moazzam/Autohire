@@ -24,9 +24,17 @@ with two implementations: a local one and a real one. `APP_ENV` picks which.
 ```python
 class ResumeStore(Protocol):
     def create_job_folder(self, recruiter: Recruiter, job_id: UUID, name: str) -> str: ...
+    def store_resume(
+        self, recruiter: Recruiter, job: JobPosting, filename: str, content: bytes
+    ) -> StoredFile: ...
 ```
 
-(`store_resume(...)` — the file-upload half — is added in US-12, once `candidates` exists.)
+`store_resume` (US-12) always receives a server-generated `filename`
+(`{uuid4}.{validated-extension}`) — the candidate's raw filename never reaches an
+adapter. `content` is already validated (magic bytes) and size-capped by the time an
+adapter sees it; adapters are storage, not validation. `StoredFile` carries
+`storage_key` (local path, or the Drive file id) plus, in cloud mode, `drive_file_id`
+and `drive_url`.
 
 | Concern | `APP_ENV=local` | `APP_ENV=cloud` |
 |---|---|---|

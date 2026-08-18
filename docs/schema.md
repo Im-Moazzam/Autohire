@@ -158,7 +158,9 @@ INDEX on (recruiter_id, status), and (expires_at) WHERE status = 'LIVE'.
 | deleted_at | TIMESTAMPTZ | NULL |
 
 A candidate is scoped to one job. Same person, two jobs = two rows.
-UNIQUE (job_id, email) — prevents double submission to the same posting.
+UNIQUE (job_id, email) — prevents double submission to the same posting. **Partial**:
+`WHERE deleted_at IS NULL`, same precedent as `form_templates`' name index, so a
+soft-deleted candidate frees its email for re-application (landed in US-12).
 
 `resume_url` in API responses (`CandidateOut`) is a computed field, not a stored
 column — derived from `resume_drive_url` when `APP_ENV != local` or from

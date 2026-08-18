@@ -3,6 +3,58 @@
 ## [Unreleased]
 
 ### Added
+- US-12: `POST /public/apply/{apply_slug}` is real — the biggest attack surface in
+  the system, unauthenticated and accepting a file upload. `candidates` and
+  `candidate_form_responses` migration per `docs/schema.md`, with a **partial**
+  UNIQUE `(job_id, email) WHERE deleted_at IS NULL` (a soft-deleted candidate frees
+  its email for re-application, same precedent as US-04's template-name index).
+  Closes `docs/drift.md` row 29: `job_service.submission_counts_by_job` /
+  `submission_counts_by_status` replace the hardcoded placeholder with real
+  `GROUP BY` queries, each scoped to a page or a single job.
+
+  File acceptance (`app/services/resume_validation.py`) never trusts the client:
+  type is decided purely from magic bytes (`%PDF-`, the OLE2 header, or a ZIP whose
+  entries include `[Content_Types].xml` + `word/*` for `.docx` — a bare ZIP header
+  isn't enough, since `.zip`/`.jar` share it), and the 5MB cap is enforced by
+  counting bytes as `read_capped` streams them, never by trusting `Content-Length`.
+  A best-effort `Content-Length` pre-gate on the route rejects the common
+  grossly-oversized case before the body is parsed at all; `read_capped` is what
+  actually enforces the cap either way. The stored filename is always
+  `{uuid4}.{validated-extension}` — the candidate's raw filename never reaches the
+  filesystem or Drive.
+
+  `ResumeStore` gains `store_resume(recruiter, job, filename, content) -> StoredFile`.
+  `LocalResumeStore` writes under `LOCAL_STORAGE_ROOT/resumes/{job_id}/`, with a
+  resolved-path check as defence in depth against path traversal. `DriveResumeStore`
+  does one `multipart/related` upload via `google_call` (not a create-then-patch-media
+  two-call sequence, which would double-log `api_usage_logs` for a single upload).
+  Ordering matches US-06: the resume is stored *first*, then the candidate row
+  commits with the resulting key — a DB failure never leaves a row pointing at a
+  file that doesn't exist, and a storage failure leaves no row at all.
+
+  `app/services/identity_fields.py` resolves which template field answers a
+  candidate's email/full name by a normalised label match — the single place both
+  `template_service` (reject a template missing either at save time, 422
+  `TEMPLATE_MISSING_IDENTITY_FIELD`) and `candidate_service` (read the answer at
+  submission time) agree on what counts as "the email field". Validating at template
+  save time, not just submission time, means a misconfigured template is the
+  recruiter's error to fix, not a candidate-facing 500 mid-application.
+
+  `candidate_service.submit_application` calls `job_service.assert_job_accepting`
+  (the same US-11 function, not a second copy) before writing anything. An
+  unrecognized `field_id` — whether it isn't a UUID at all or belongs to another
+  template — is 422 `UNKNOWN_FIELD`, not silently dropped. Free-text responses are
+  capped at 5000 characters in Pydantic (`response_value` is unbounded `TEXT`).
+  `POST /public/apply/{slug}` is the one `async def` route in the codebase, solely so
+  it can `await request.form()` for the `field_id`-keyed parts FastAPI already parsed
+  to resolve `resume: UploadFile`; all blocking work (DB, and in cloud mode
+  `google_call`'s sleep-based retry) runs via `run_in_threadpool`, since `google_call`
+  must never block the event loop.
+
+  Amends two AC numbers from the story text against `docs/api-contract.md`, which
+  predates it: the size cap is 5MB, not 10MB, and file-shape rejections are
+  413/415, not 422 (`docs/drift.md`).
+
 - US-11: `GET /public/apply/{apply_slug}` — the first unauthenticated, no-session
   endpoint in the system — is real. `job_service.get_job_by_slug` looks up by
   `apply_slug` only (never `job_id`), scoped to non-deleted rows, and

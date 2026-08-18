@@ -10,22 +10,17 @@ from sqlalchemy.orm import Session, selectinload
 from app.adapters.base import ResumeStore
 from app.core.config import settings
 from app.core.exceptions import JobNotAccepting
+from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.models.template import FormTemplate
 from app.schemas.common import PaginationParams
-from app.schemas.enums import JobStatus
+from app.schemas.enums import JobStatus, SubmissionStatus
 from app.schemas.job import JobCreate, JobUpdate
 from app.services import template_service
 
 _TEMPLATE_NOT_FOUND = {"code": "TEMPLATE_NOT_FOUND", "message": "Template not found."}
 _MAX_SLUG_ATTEMPTS = 5
-
-# ponytail: candidates doesn't exist until US-12/US-13, so this can't be a
-# COUNT subquery yet. Both submission_count and submission_counts resolve to
-# this placeholder; swap for the real correlated subquery when US-13 lands
-# (docs/drift.md), which also closes this row.
-_SUBMISSION_COUNT_PLACEHOLDER = 0
 
 # Legal transition graph, ADR-004 P3 / docs/api-contract.md § Jobs. Moved out
 # of app/api/fixtures.py — jobs.py was its only caller.
@@ -43,8 +38,31 @@ def is_legal_transition(current: JobStatus, target: JobStatus) -> bool:
     return target in _LEGAL_TRANSITIONS[current]
 
 
-def submission_count_placeholder() -> int:
-    return _SUBMISSION_COUNT_PLACEHOLDER
+def submission_counts_by_job(db: Session, job_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    """One GROUP BY over the caller's page of job_ids — never the whole table —
+    so a list endpoint stays a single bounded query (closes docs/drift.md row 29)."""
+    if not job_ids:
+        return {}
+    rows = db.execute(
+        select(Candidate.job_id, func.count())
+        .where(Candidate.job_id.in_(job_ids), Candidate.deleted_at.is_(None))
+        .group_by(Candidate.job_id)
+    ).all()
+    return {job_id: count for job_id, count in rows}
+
+
+def submission_counts_by_status(db: Session, job_id: uuid.UUID) -> dict[SubmissionStatus, int]:
+    """Zero-filled across every SubmissionStatus, so the detail response never
+    omits a key the frontend expects."""
+    counts: dict[SubmissionStatus, int] = dict.fromkeys(SubmissionStatus, 0)
+    rows = db.execute(
+        select(Candidate.submission_status, func.count())
+        .where(Candidate.job_id == job_id, Candidate.deleted_at.is_(None))
+        .group_by(Candidate.submission_status)
+    ).all()
+    for status_, count in rows:
+        counts[status_] = count
+    return counts
 
 
 def _new_slug() -> str:

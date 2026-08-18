@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.template import FormTemplate, TemplateField
 from app.schemas.common import PaginationParams
 from app.schemas.template import TemplateFieldIn
+from app.services.identity_fields import resolve_identity_fields
 
 _DUPLICATE_NAME = {
     "code": "DUPLICATE_TEMPLATE_NAME",
@@ -22,6 +23,28 @@ _TEMPLATE_IN_USE = {
     "code": "TEMPLATE_IN_USE",
     "message": "This template is referenced by a job posting.",
 }
+
+
+def _assert_has_identity_fields(fields: list[TemplateFieldIn]) -> None:
+    """A candidate applying through this template must resolve an email and a
+    full name (US-12 needs both to write a candidates row). Checked here, at
+    save time, so a missing field is the recruiter's 422 to fix in the
+    template builder — not a candidate's 500 mid-application."""
+    email_index, name_index = resolve_identity_fields([field.field_label for field in fields])
+    missing = [
+        column
+        for column, index in (("email", email_index), ("full_name", name_index))
+        if index is None
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "TEMPLATE_MISSING_IDENTITY_FIELD",
+                "message": "Template must have a field recognizable as an email and a full name.",
+                "details": {"missing": missing},
+            },
+        )
 
 
 def _commit(db: Session, template: FormTemplate) -> None:
@@ -90,6 +113,7 @@ def get_template(
 def create_template(
     db: Session, recruiter_id: uuid.UUID, template_name: str, fields: list[TemplateFieldIn]
 ) -> FormTemplate:
+    _assert_has_identity_fields(fields)
     template = FormTemplate(recruiter_id=recruiter_id, template_name=template_name)
     for field in _normalize_order(fields):
         template.fields.append(
@@ -112,6 +136,7 @@ def replace_template(
     """Reconciles by field_id: a field with an id keeps its row (its answers on
     candidate_form_responses stay valid), a field without one is a new row, and
     any existing row not present in the payload is deleted."""
+    _assert_has_identity_fields(fields)
     template.template_name = template_name
     template.updated_at = datetime.now(UTC)
 

@@ -100,6 +100,11 @@ without hitting the `(template_id, field_order)` UNIQUE constraint.
 references the template (US-06 wired the real check against `job_postings`; drift
 row 27 closed).
 
+`POST` and `PUT` return 422 `TEMPLATE_MISSING_IDENTITY_FIELD` when no field resolves
+to an email or a full name by normalised label match (US-12) — candidates are
+identified by those two columns and the form is template-driven, so a template that
+can't answer them would only fail later, as a candidate-facing 500 at submission time.
+
 ## Jobs
 | Method | Path | Notes |
 |---|---|---|
@@ -133,12 +138,32 @@ ambiguous.
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. Unknown slug, soft-deleted, or DRAFT → 404. CLOSED/paused/expired → 410 `JOB_CLOSED` |
-| POST | `/api/v1/public/apply/{apply_slug}` | multipart. Rate-limited by IP |
+| POST | `/api/v1/public/apply/{apply_slug}` | multipart: a `resume` file part plus one part per template field, keyed by `field_id` (the UUID from `GET`'s `fields[].field_id`) |
 
 The only two unauthenticated endpoints in the system, mounted as a separate
-`APIRouter` under `/api/v1/public/*` (P1) so rate limiting and "no auth dependency
-here" are enforced at the router level. Rate limit them, validate file type by magic
-bytes not extension, cap size at 5MB.
+`APIRouter` under `/api/v1/public/*` (P1) so "no auth dependency here" is enforced at
+the router level. Rate limiting by IP is a documented gap, not built (`docs/drift.md`
+row 36) — out of scope for US-12, belongs in deployment configuration.
+
+`POST /public/apply/{apply_slug}` (US-12):
+- 404 `JOB_NOT_FOUND` / 410 `JOB_CLOSED` — identical to `GET`, via the same
+  `job_service.assert_job_accepting`.
+- 422 `MISSING_REQUIRED_FIELD` — a required field (or the resolved email/full-name
+  field, regardless of its `is_required` flag) is missing or blank.
+- 422 `UNKNOWN_FIELD` — a submitted key isn't a UUID, or is a UUID not belonging to
+  this job's template. Never silently dropped.
+- 422 `VALIDATION_ERROR` — malformed email, or a free-text response over 5000 characters.
+- 409 `DUPLICATE_SUBMISSION` — `(job_id, email)` already has a non-deleted candidate.
+- 413 `FILE_TOO_LARGE` — resume exceeds `MAX_RESUME_MB` (5MB). Enforced by counting
+  bytes as the upload streams, never by trusting `Content-Length`.
+- 415 `UNSUPPORTED_FILE_TYPE` — file type decided by magic bytes only (`.pdf`, `.doc`,
+  `.docx`), never the extension or the client's declared `Content-Type`.
+- 422 `EMPTY_FILE` — 0-byte upload.
+- 500 `RESUME_UPLOAD_FAILED` (local) / 502 (cloud) — storage failed; no candidate row
+  is created (resume is stored *before* the candidate row commits, same ordering as
+  US-06's job-launch flow).
+- 500 `TEMPLATE_MISSING_IDENTITY_FIELD` — unreachable in practice; `template_service`
+  rejects a template missing an email/full-name-resolvable field at save time.
 
 **Not the same URL as the SPA route.** Candidates visit `/apply/{slug}` in the
 browser — that's the React app route (ADR-001), not an API endpoint. `JobOut.apply_url`

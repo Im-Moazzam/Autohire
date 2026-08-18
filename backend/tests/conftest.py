@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.db import SessionLocal
 from app.main import app
 from app.models.api_usage_log import ApiUsageLog
+from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter, RecruiterState
 from app.models.template import FormTemplate
@@ -33,7 +34,9 @@ def _local_storage_root(tmp_path: Path) -> Generator[None, None, None]:
 def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
-    # FK order: JobPosting references FormTemplate, so it must go first.
+    # FK order: CandidateFormResponse -> Candidate -> JobPosting -> FormTemplate.
+    session.query(CandidateFormResponse).delete()
+    session.query(Candidate).delete()
     session.query(JobPosting).delete()
     session.query(ApiUsageLog).delete()
     session.query(FormTemplate).delete()
