@@ -2,7 +2,87 @@
 
 ## [Unreleased]
 
+### Fixed
+- US-15/16: `resume_parser.extract_text` glued icon-font glyphs directly onto
+  adjacent words (e.g. a phone number rendered as an unrenderable codepoint
+  immediately followed by the digits, no whitespace) — found on a real resume
+  during the manual live-worker smoke test that `task_always_eager` unit tests
+  can't reach. Icon fonts (phone/email/location pictograms, common in resume
+  templates) map their glyphs into the Unicode Private Use Areas; `pypdf`
+  faithfully returns whatever codepoint the font's cmap gives it, but there is
+  no real character behind it. Now stripped to a space (not deleted outright,
+  so words don't glue together) before the `MIN_CHARS` check. Left in, this
+  would have quietly degraded US-18's embeddings on every resume built from a
+  template using an icon font.
+
 ### Added
+- US-15/16 (commit 2 — extraction): the `RESUME_PARSE` task's per-candidate body is
+  real. `app/services/resume_parser.py` — `extract_text(content, ext) -> str`,
+  `pypdf` for PDF, `python-docx` for DOCX (including table-laid-out resumes, not just
+  top-level paragraphs — the real DOCX fixture is table-based and top-level-only
+  extraction silently returned empty text against it). Fewer than ~50 extracted
+  characters (a scanned/image-only PDF) is `ExtractionFailed` with a message distinct
+  from a corrupt-file failure — never a silent empty-string `PARSED` row that would
+  rank bottom in US-18 (`docs/drift.md` #41, OCR out of scope). A password-protected
+  PDF gets its own distinct message too.
+
+  `ResumeStore` gains `fetch_resume(recruiter, candidate) -> bytes` on the Protocol
+  and both implementations — extraction never opens a path directly.
+  `LocalResumeStore` reuses the same path-containment guard as `store_resume`;
+  `DriveResumeStore` is one `google_call` (`GET .../files/{id}?alt=media`).
+
+  Per candidate, in a loop that commits after each one so a single failure can never
+  roll back or abort the rest of the batch (**TC-05, the story's headline AC**): fetch
+  the resume, sniff its extension from magic bytes (`resume_validation.sniff_extension`
+  — never a filename, which doesn't survive in cloud mode either), extract text. Success
+  → `resume_text` set, `parse_error` cleared, `SUBMITTED`/`PARSE_ERROR` → `PARSED`.
+  Failure → `PARSE_ERROR` with the human-readable message, batch continues. Only
+  `SUBMITTED`/`PARSE_ERROR` candidates are selected — a re-trigger after a partial
+  failure only retries the failures, never re-parses an already-`PARSED` row.
+
+  Closes `docs/drift.md` row 38: `candidate_service._LEGAL_TRANSITIONS` (mirroring
+  `job_service`'s graph) gives `submission_status` a real legality graph for the first
+  time — `PATCH /candidates/{id}` now 409s `INVALID_STATE_TRANSITION` on an illegal
+  move (e.g. `PARSED` backwards to `SUBMITTED`). The retry AC is itself expressed as a
+  graph rule (`PARSED` has no path back to `PARSED`), not just a query filter.
+
+  `candidates.resume_text` migration — `ai_analysis_results` (schema.md's designated
+  home) doesn't exist until US-18, so extracted text lives on `candidates` for now
+  (`docs/drift.md` #40). One `RESUME_PARSE` task **per job**, not per candidate,
+  departs from `architecture.md`'s literal fan-out description (`docs/drift.md` #39) —
+  every AC/TC in the story describes a single `background_tasks` row per job.
+- US-15/16 (commit 1 — task plumbing): `POST /jobs/{job_id}/process` and
+  `GET /jobs/{job_id}/process/status` swap their TS-02 fixture stubs for a real Celery
+  task. `background_tasks` migration (`task_type_enum`/`task_status_enum` per
+  `docs/schema.md`) plus a partial UNIQUE index on
+  `job_id WHERE task_type='RESUME_PARSE' AND status IN ('PENDING','RUNNING')` — the
+  actual concurrency guard behind 409 `PROCESSING_IN_PROGRESS`; the enqueue path's
+  pre-check (`task_service.active_task_for_job`) is only the fast path, same
+  precedent as US-12's `uq_candidates_job_email`. The row is written **on enqueue,
+  not on worker start** — committed before `.delay()` is ever called, so a
+  worker/broker that never picks up the job still leaves a trace (verified directly:
+  a test that makes `.delay()` raise still finds the row `PENDING`).
+
+  `app/tasks/resume_parse.py` — one `RESUME_PARSE` Celery task **per job**, not per
+  candidate, departing from `architecture.md`'s literal fan-out description
+  (`docs/drift.md`): every AC and test case in the story describes a single
+  `background_tasks` row per job. Opens its **own** `SessionLocal()`, never a
+  session passed in from a request — same rule `adapters/google/session.py`
+  follows. `acks_late=True`, `max_retries=3`, `soft_time_limit`, exponential
+  backoff; `autoretry_for` is scoped to transient infrastructure failures only
+  (`OperationalError` for now — commit 2 adds the Google-call transient case), never
+  broad exceptions, since per-candidate failures are handled in-loop and retrying on
+  them would redo already-completed work. Idempotency key is the task's own
+  `task_id`: re-running an already-terminal (`SUCCESS`/`FAILED`) task is a no-op.
+  Commit 1's per-candidate body is a placeholder (`_process_job_candidates` does
+  nothing yet) — real extraction lands in commit 2.
+
+  `GET /process/status` counts are computed from `candidates.submission_status`
+  rows, never from task state (AC) — `processed` sums every status downstream of a
+  successful parse, `failed` is `PARSE_ERROR`.
+
+  Tests run Celery eagerly (`celery_app.conf.task_always_eager`, opt-in per test via
+  a `celery_eager` fixture) — no live worker needed in CI.
 - US-13: `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, and
   `PATCH /candidates/{id}` swap their TS-02 fixture stubs for real queries — the
   first time a recruiter can see what's actually been submitted. Closes a live

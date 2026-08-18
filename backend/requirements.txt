@@ -8,6 +8,8 @@ pydantic-settings
 email-validator
 celery
 redis
+pypdf
+python-docx
 python-multipart
 httpx
 cryptography

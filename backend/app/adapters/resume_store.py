@@ -1,5 +1,6 @@
 import uuid
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from app.adapters.base import ResumeStore, StoredFile
 from app.adapters.google.session import google_call
@@ -7,6 +8,9 @@ from app.core.config import settings
 from app.models.api_usage_log import ApiName
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
+
+if TYPE_CHECKING:
+    from app.models.candidate import Candidate
 
 DRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
 DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
@@ -43,6 +47,17 @@ class LocalResumeStore:
             raise ValueError(f"resolved resume path {target} escapes job folder {folder}")
         target.write_bytes(content)
         return StoredFile(storage_key=str(target))
+
+    def fetch_resume(self, recruiter: Recruiter, candidate: "Candidate") -> bytes:
+        if not candidate.resume_storage_key:
+            raise FileNotFoundError(f"no resume stored for candidate {candidate.candidate_id}")
+        folder = local_job_folder(candidate.job_id).resolve()
+        target = Path(candidate.resume_storage_key).resolve()
+        # Same containment guard as store_resume / resolve_resume_path — the
+        # stored key is server-generated, but this is defence in depth.
+        if folder not in target.parents:
+            raise ValueError(f"resolved resume path {target} escapes job folder {folder}")
+        return target.read_bytes()
 
 
 class DriveResumeStore:
@@ -87,6 +102,17 @@ class DriveResumeStore:
         return StoredFile(
             storage_key=data["id"], drive_file_id=data["id"], drive_url=data.get("webViewLink")
         )
+
+    def fetch_resume(self, recruiter: Recruiter, candidate: "Candidate") -> bytes:
+        if not candidate.resume_drive_file_id:
+            raise FileNotFoundError(f"no resume stored for candidate {candidate.candidate_id}")
+        response = google_call(
+            recruiter,
+            ApiName.GOOGLE_DRIVE,
+            "GET",
+            f"{DRIVE_FILES_URL}/{candidate.resume_drive_file_id}?alt=media",
+        )
+        return response.content
 
 
 def get_resume_store() -> ResumeStore:

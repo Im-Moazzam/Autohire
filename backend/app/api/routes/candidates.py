@@ -146,13 +146,26 @@ def download_resume(candidate: Candidate = Depends(get_owned_candidate)) -> File
 @candidates_router.patch(
     "/{candidate_id}",
     response_model=CandidateDetailOut,
-    responses=error_responses(401, 404, 422),
+    responses=error_responses(401, 404, 409, 422),
 )
 def update_candidate(
     payload: CandidateUpdate,
     candidate: Candidate = Depends(get_owned_candidate),
     db: Session = Depends(get_db),
 ) -> CandidateDetailOut:
+    if not candidate_service.is_legal_transition(
+        candidate.submission_status, payload.submission_status
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "INVALID_STATE_TRANSITION",
+                "message": (
+                    f"Cannot transition candidate from {candidate.submission_status} "
+                    f"to {payload.submission_status}."
+                ),
+            },
+        )
     candidate.submission_status = payload.submission_status
     db.commit()
     db.refresh(candidate)

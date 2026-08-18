@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 from app.models.recruiter import Recruiter
 
 if TYPE_CHECKING:
+    from app.models.candidate import Candidate
     from app.models.job import JobPosting
 
 
@@ -21,3 +22,5 @@ class ResumeStore(Protocol):
     def store_resume(
         self, recruiter: Recruiter, job: "JobPosting", filename: str, content: bytes
     ) -> StoredFile: ...
+
+    def fetch_resume(self, recruiter: Recruiter, candidate: "Candidate") -> bytes: ...

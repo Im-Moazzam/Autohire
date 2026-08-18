@@ -114,6 +114,14 @@ can't answer them would only fail later, as a candidate-facing 500 at submission
 | PATCH | `/jobs/{id}` | JD edit, TTL extend/revoke, `is_accepting_responses`, `status` |
 | DELETE | `/jobs/{id}` | Phase 2 (US-09/US-10) — out of scope; US-06 explicitly excludes edit/TTL-extend/delete from Phase 1 |
 | POST | `/jobs/{id}/process` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED and candidates exist |
+| GET | `/jobs/{id}/process/status` | `ProcessStatusOut` — `total`/`processed`/`failed` computed from `candidates.submission_status`, not task state |
+
+**`POST /jobs/{id}/process` 409s, US-15/16.** Three distinct codes, checked in this
+order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE` task for this job is already
+`PENDING`/`RUNNING` — enforced by a partial unique index, not just a pre-check),
+`INVALID_STATE_TRANSITION` (job isn't `CLOSED`), `NO_CANDIDATES` (job has zero live
+candidates). The `background_tasks` row is written before the Celery task is
+dispatched, so a trace exists even if the broker never picks it up.
 
 **No close action endpoint.** Closing a job is `PATCH /jobs/{id}` with
 `{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a

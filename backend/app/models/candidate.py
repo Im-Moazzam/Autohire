@@ -39,6 +39,9 @@ class Candidate(Base):
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )
     parse_error: Mapped[str | None] = mapped_column(Text(), nullable=True)
+    # docs/drift.md: ai_analysis_results (schema.md's designated home) doesn't
+    # exist until US-18, so extracted text lives here until that table lands.
+    resume_text: Mapped[str | None] = mapped_column(Text(), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
 
     form_responses: Mapped[list["CandidateFormResponse"]] = relationship(

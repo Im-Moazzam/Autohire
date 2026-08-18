@@ -24,6 +24,46 @@ from app.services.resume_validation import EmptyFile, FileTooLarge, read_capped,
 
 _MAX_RESPONSE_LEN = 5000
 
+# Legal transition graph, closing docs/drift.md row 38. Mirrors
+# job_service._LEGAL_TRANSITIONS. PARSED is never re-parsed — the retry AC
+# ("retry only SUBMITTED and PARSE_ERROR") is itself a transition rule, not
+# just a query filter. REJECTED is reachable from any non-terminal state.
+_LEGAL_TRANSITIONS: dict[SubmissionStatus, set[SubmissionStatus]] = {
+    SubmissionStatus.SUBMITTED: {
+        SubmissionStatus.PARSED,
+        SubmissionStatus.PARSE_ERROR,
+        SubmissionStatus.REJECTED,
+    },
+    SubmissionStatus.PARSE_ERROR: {
+        SubmissionStatus.PARSED,
+        SubmissionStatus.PARSE_ERROR,
+        SubmissionStatus.REJECTED,
+    },
+    SubmissionStatus.PARSED: {SubmissionStatus.RANKED, SubmissionStatus.REJECTED},
+    SubmissionStatus.RANKED: {SubmissionStatus.INVITED, SubmissionStatus.REJECTED},
+    SubmissionStatus.INVITED: {
+        SubmissionStatus.CONFIRMED,
+        SubmissionStatus.DECLINED,
+        SubmissionStatus.RESCHEDULED,
+        SubmissionStatus.REJECTED,
+    },
+    SubmissionStatus.RESCHEDULED: {
+        SubmissionStatus.CONFIRMED,
+        SubmissionStatus.DECLINED,
+        SubmissionStatus.REJECTED,
+    },
+    SubmissionStatus.CONFIRMED: {SubmissionStatus.RESCHEDULED, SubmissionStatus.REJECTED},
+    SubmissionStatus.DECLINED: set(),
+    SubmissionStatus.REJECTED: set(),
+}
+
+
+def is_legal_transition(current: SubmissionStatus, target: SubmissionStatus) -> bool:
+    if current == target:
+        return True
+    return target in _LEGAL_TRANSITIONS[current]
+
+
 _UNKNOWN_FIELD = {"code": "UNKNOWN_FIELD", "message": "Submission contains an unrecognized field."}
 _MISSING_REQUIRED = {"code": "MISSING_REQUIRED_FIELD", "message": "A required field is missing."}
 _DUPLICATE_SUBMISSION = {

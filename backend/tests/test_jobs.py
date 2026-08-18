@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.adapters.resume_store import LocalResumeStore, get_resume_store
-from app.api import fixtures
 from app.main import app
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
@@ -220,31 +219,8 @@ def test_list_jobs_only_returns_callers_jobs(
     assert response.json()["total"] == 0
 
 
-# STUB tests for US-15/US-16 process endpoints, moved from test_stub_jobs.py —
-# they still need a real job row to exist, just in Postgres now.
-def test_process_requires_closed_with_candidates(
-    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
-) -> None:
-    response = authed_client.post(f"/api/v1/jobs/{fixtures.JOB_DRAFT_ID}/process")
-    assert response.status_code == 409
-
-    response = authed_client.post(f"/api/v1/jobs/{fixtures.JOB_CLOSED_ID}/process")
-    assert response.status_code == 202
-    body = response.json()
-    assert body["task_id"]
-
-    poll = authed_client.get(f"/api/v1/tasks/{body['task_id']}")
-    assert poll.status_code == 200
-
-
-def test_process_status_computed_counts(
-    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
-) -> None:
-    response = authed_client.get(f"/api/v1/jobs/{fixtures.JOB_LIVE_ID}/process/status")
-    assert response.status_code == 200
-    body = response.json()
-    assert body["total"] == body["processed"] + body["failed"]
-    assert body["failed"] >= 1
+# Real /process and /process/status coverage lives in test_process.py
+# (US-15/16) — these routes are no longer fixture-backed stubs.
 
 
 def _add_candidate(
