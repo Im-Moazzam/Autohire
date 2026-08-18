@@ -3,6 +3,41 @@
 ## [Unreleased]
 
 ### Added
+- US-15/16 (commit 2 — extraction): the `RESUME_PARSE` task's per-candidate body is
+  real. `app/services/resume_parser.py` — `extract_text(content, ext) -> str`,
+  `pypdf` for PDF, `python-docx` for DOCX (including table-laid-out resumes, not just
+  top-level paragraphs — the real DOCX fixture is table-based and top-level-only
+  extraction silently returned empty text against it). Fewer than ~50 extracted
+  characters (a scanned/image-only PDF) is `ExtractionFailed` with a message distinct
+  from a corrupt-file failure — never a silent empty-string `PARSED` row that would
+  rank bottom in US-18 (`docs/drift.md` #41, OCR out of scope). A password-protected
+  PDF gets its own distinct message too.
+
+  `ResumeStore` gains `fetch_resume(recruiter, candidate) -> bytes` on the Protocol
+  and both implementations — extraction never opens a path directly.
+  `LocalResumeStore` reuses the same path-containment guard as `store_resume`;
+  `DriveResumeStore` is one `google_call` (`GET .../files/{id}?alt=media`).
+
+  Per candidate, in a loop that commits after each one so a single failure can never
+  roll back or abort the rest of the batch (**TC-05, the story's headline AC**): fetch
+  the resume, sniff its extension from magic bytes (`resume_validation.sniff_extension`
+  — never a filename, which doesn't survive in cloud mode either), extract text. Success
+  → `resume_text` set, `parse_error` cleared, `SUBMITTED`/`PARSE_ERROR` → `PARSED`.
+  Failure → `PARSE_ERROR` with the human-readable message, batch continues. Only
+  `SUBMITTED`/`PARSE_ERROR` candidates are selected — a re-trigger after a partial
+  failure only retries the failures, never re-parses an already-`PARSED` row.
+
+  Closes `docs/drift.md` row 38: `candidate_service._LEGAL_TRANSITIONS` (mirroring
+  `job_service`'s graph) gives `submission_status` a real legality graph for the first
+  time — `PATCH /candidates/{id}` now 409s `INVALID_STATE_TRANSITION` on an illegal
+  move (e.g. `PARSED` backwards to `SUBMITTED`). The retry AC is itself expressed as a
+  graph rule (`PARSED` has no path back to `PARSED`), not just a query filter.
+
+  `candidates.resume_text` migration — `ai_analysis_results` (schema.md's designated
+  home) doesn't exist until US-18, so extracted text lives on `candidates` for now
+  (`docs/drift.md` #40). One `RESUME_PARSE` task **per job**, not per candidate,
+  departs from `architecture.md`'s literal fan-out description (`docs/drift.md` #39) —
+  every AC/TC in the story describes a single `background_tasks` row per job.
 - US-15/16 (commit 1 — task plumbing): `POST /jobs/{job_id}/process` and
   `GET /jobs/{job_id}/process/status` swap their TS-02 fixture stubs for a real Celery
   task. `background_tasks` migration (`task_type_enum`/`task_status_enum` per

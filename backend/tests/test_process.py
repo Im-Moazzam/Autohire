@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -6,6 +7,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from app.adapters.resume_store import local_job_folder
 from app.models.background_task import BackgroundTask
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
@@ -13,6 +15,9 @@ from app.models.recruiter import Recruiter
 from app.schemas.enums import TaskStatus, TaskType
 from app.services import task_service
 from app.services.auth_service import SESSION_COOKIE, create_session_cookie
+from app.tasks.resume_parse import resume_parse_job
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "resumes"
 
 
 def _create_template(client: TestClient) -> dict:
@@ -59,9 +64,26 @@ def _create_closed_job(client: TestClient) -> dict:
 
 
 def _add_candidate(db_session: Session, job_id: uuid.UUID, email: str) -> Candidate:
-    # Commit 1 tests never run the real task body — no resume file is needed
-    # on disk yet, just a candidate row so the has-candidates guard passes.
+    # Enqueue-path tests never run the real task body — no resume file is
+    # needed on disk, just a candidate row so the has-candidates guard passes.
     candidate = Candidate(job_id=job_id, full_name=email.split("@")[0], email=email)
+    db_session.add(candidate)
+    db_session.commit()
+    db_session.refresh(candidate)
+    return candidate
+
+
+def _add_candidate_with_resume(
+    db_session: Session, job_id: uuid.UUID, email: str, fixture_name: str
+) -> Candidate:
+    ext = fixture_name.rsplit(".", 1)[-1]
+    folder = local_job_folder(job_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / f"{uuid.uuid4()}.{ext}"
+    target.write_bytes((_FIXTURES / fixture_name).read_bytes())
+    candidate = Candidate(
+        job_id=job_id, full_name=email.split("@")[0], email=email, resume_storage_key=str(target)
+    )
     db_session.add(candidate)
     db_session.commit()
     db_session.refresh(candidate)
@@ -257,32 +279,207 @@ def test_process_status_sums_correctly_across_mixed_statuses(
     assert body["failed"] == 1
 
 
-def test_task_placeholder_run_marks_success_idempotently(
+# --- transition graph --------------------------------------------------------
+
+
+def test_patch_parsed_backwards_to_submitted_is_409(
     authed_client: TestClient, db_session: Session
 ) -> None:
-    """Commit 1's task body does no real extraction yet — this only proves
-    the plumbing round-trip (PENDING -> RUNNING -> SUCCESS) and that running
-    the same task_id twice is a safe no-op (TC-07's shape, ahead of commit 2's
-    real per-candidate work)."""
-    from app.tasks.resume_parse import resume_parse_job
-
+    # Same-state PATCH (PARSED -> PARSED) is a legal no-op, mirroring
+    # job_service.is_legal_transition. The illegal move is going backwards —
+    # PARSED is never re-parsed, which is the retry AC expressed as a graph
+    # rule rather than just a query filter.
     job = _create_closed_job(authed_client)
-    job_id = uuid.UUID(job["job_id"])
-    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate_with_resume(
+        db_session, uuid.UUID(job["job_id"]), "a@example.com", "Moazzam_Resume.pdf"
+    )
+    candidate.submission_status = "PARSED"
+    db_session.commit()
+
+    response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "SUBMITTED"}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "INVALID_STATE_TRANSITION"
+
+
+# --- task execution: TC-04 through TC-09 -------------------------------------
+# These call the task function directly (resume_parse_job.run) rather than
+# via .delay()/eager mode through the route — that isolates "does the task's
+# business logic behave correctly" from "does the HTTP layer wire it up",
+# which the enqueue-path tests above already cover.
+
+
+def _make_task_row(db_session: Session, recruiter: Recruiter, job_id: uuid.UUID) -> BackgroundTask:
     task = BackgroundTask(
         recruiter_id=recruiter.recruiter_id, job_id=job_id, task_type=TaskType.RESUME_PARSE
     )
     db_session.add(task)
     db_session.commit()
     db_session.refresh(task)
+    return task
 
+
+# TC-05 — the most important test in the story: one corrupt PDF among five,
+# the other four still PARSE, failed=1. Written first, per the story.
+def test_one_corrupt_pdf_among_five_does_not_abort_the_batch(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+
+    good = [
+        _add_candidate_with_resume(db_session, job_id, f"good{i}@example.com", "Moazzam_Resume.pdf")
+        for i in range(4)
+    ]
+    bad = _add_candidate_with_resume(db_session, job_id, "bad@example.com", "corrupt.pdf")
+
+    task = _make_task_row(db_session, recruiter, job_id)
     resume_parse_job.run(str(task.task_id))
+
     db_session.expire_all()
+    for candidate in good:
+        db_session.refresh(candidate)
+        assert candidate.submission_status == "PARSED"
+        assert candidate.resume_text and len(candidate.resume_text.strip()) > 0
+        assert candidate.parse_error is None
+
+    db_session.refresh(bad)
+    assert bad.submission_status == "PARSE_ERROR"
+    assert bad.parse_error
+    assert bad.resume_text is None
+
     db_session.refresh(task)
     assert task.status == TaskStatus.SUCCESS
-    first_completed_at = task.completed_at
 
+    counts = task_service.process_status_for_job(db_session, job_id)
+    assert counts["total"] == 5
+    assert counts["processed"] == 4
+    assert counts["failed"] == 1
+
+
+# TC-04
+def test_all_valid_resumes_all_parsed(authed_client: TestClient, db_session: Session) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    for i in range(5):
+        _add_candidate_with_resume(db_session, job_id, f"ok{i}@example.com", "Moazzam_Resume.pdf")
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    resume_parse_job.run(str(task.task_id))
+
+    counts = task_service.process_status_for_job(db_session, job_id)
+    assert counts["processed"] == 5
+    assert counts["failed"] == 0
+
+
+# TC-06
+def test_task_raising_outside_loop_marks_task_failed_candidates_untouched(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate_with_resume(
+        db_session, job_id, "a@example.com", "Moazzam_Resume.pdf"
+    )
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    with (
+        patch("app.tasks.resume_parse.get_resume_store", side_effect=RuntimeError("store down")),
+        pytest.raises(RuntimeError),
+    ):
+        resume_parse_job.run(str(task.task_id))
+
+    db_session.expire_all()
+    db_session.refresh(task)
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message
+    db_session.refresh(candidate)
+    assert candidate.submission_status == "SUBMITTED"  # left retryable, not stuck
+
+
+# TC-07
+def test_running_same_task_twice_does_not_duplicate_work(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    _add_candidate_with_resume(db_session, job_id, "a@example.com", "Moazzam_Resume.pdf")
+
+    task = _make_task_row(db_session, recruiter, job_id)
     resume_parse_job.run(str(task.task_id))
     db_session.expire_all()
     db_session.refresh(task)
-    assert task.completed_at == first_completed_at
+    first_completed_at = task.completed_at
+    assert task.status == TaskStatus.SUCCESS
+
+    resume_parse_job.run(str(task.task_id))  # same task_id, terminal already
+    db_session.expire_all()
+    db_session.refresh(task)
+    assert task.completed_at == first_completed_at  # untouched — early return
+
+    counts = task_service.process_status_for_job(db_session, job_id)
+    assert counts["processed"] == 1
+    assert counts["failed"] == 0
+
+
+# TC-08
+def test_scanned_image_pdf_is_parse_error_with_distinct_message(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    scanned = _add_candidate_with_resume(
+        db_session, job_id, "scanned@example.com", "scanned_image_resume.pdf"
+    )
+    corrupt = _add_candidate_with_resume(db_session, job_id, "corrupt@example.com", "corrupt.pdf")
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    resume_parse_job.run(str(task.task_id))
+
+    db_session.expire_all()
+    db_session.refresh(scanned)
+    db_session.refresh(corrupt)
+    assert scanned.submission_status == "PARSE_ERROR"
+    assert scanned.resume_text is None
+    assert corrupt.submission_status == "PARSE_ERROR"
+    assert scanned.parse_error != corrupt.parse_error
+
+
+# TC-09
+def test_retrigger_only_reprocesses_parse_error_not_parsed(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+
+    good = _add_candidate_with_resume(db_session, job_id, "good@example.com", "Moazzam_Resume.pdf")
+    bad = _add_candidate_with_resume(db_session, job_id, "bad@example.com", "corrupt.pdf")
+
+    first_task = _make_task_row(db_session, recruiter, job_id)
+    resume_parse_job.run(str(first_task.task_id))
+    db_session.expire_all()
+    db_session.refresh(good)
+    db_session.refresh(bad)
+    assert good.submission_status == "PARSED"
+    assert bad.submission_status == "PARSE_ERROR"
+    original_good_text = good.resume_text
+
+    # Fix the "bad" candidate's stored resume in place, then re-trigger.
+    Path(bad.resume_storage_key).write_bytes((_FIXTURES / "Moazzam_Resume.pdf").read_bytes())
+
+    second_task = _make_task_row(db_session, recruiter, job_id)
+    resume_parse_job.run(str(second_task.task_id))
+
+    db_session.expire_all()
+    db_session.refresh(good)
+    db_session.refresh(bad)
+    assert good.resume_text == original_good_text  # untouched — PARSED is never re-parsed
+    assert bad.submission_status == "PARSED"  # only the PARSE_ERROR one was retried
+    assert bad.resume_text is not None
