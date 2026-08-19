@@ -5,8 +5,11 @@ alembic
 psycopg[binary]
 pydantic>=2
 pydantic-settings
+email-validator
 celery
 redis
+pypdf
+python-docx
 python-multipart
 httpx
 cryptography

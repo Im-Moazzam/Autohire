@@ -1,12 +1,13 @@
 import uuid
+from datetime import UTC, datetime
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.adapters.resume_store import LocalResumeStore, get_resume_store
-from app.api import fixtures
 from app.main import app
+from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.services.auth_service import SESSION_COOKIE, create_session_cookie
@@ -19,11 +20,23 @@ def _create_template(client: TestClient, name: str = "Standard Software Role") -
             "template_name": name,
             "fields": [
                 {
+                    "field_label": "Email",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 0,
+                },
+                {
+                    "field_label": "Full Name",
+                    "field_type": "SHORT_TEXT",
+                    "is_required": True,
+                    "field_order": 1,
+                },
+                {
                     "field_label": "Years of experience",
                     "field_type": "NUMBER",
                     "is_required": True,
-                    "field_order": 0,
-                }
+                    "field_order": 2,
+                },
             ],
         },
     )
@@ -206,28 +219,62 @@ def test_list_jobs_only_returns_callers_jobs(
     assert response.json()["total"] == 0
 
 
-# STUB tests for US-15/US-16 process endpoints, moved from test_stub_jobs.py —
-# they still need a real job row to exist, just in Postgres now.
-def test_process_requires_closed_with_candidates(
-    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+# Real /process and /process/status coverage lives in test_process.py
+# (US-15/16) — these routes are no longer fixture-backed stubs.
+
+
+def _add_candidate(
+    db_session: Session,
+    job_id: uuid.UUID,
+    email: str,
+    status: str = "SUBMITTED",
+    deleted: bool = False,
+) -> Candidate:
+    candidate = Candidate(
+        job_id=job_id,
+        full_name="Test Candidate",
+        email=email,
+        submission_status=status,
+        deleted_at=datetime.now(UTC) if deleted else None,
+    )
+    db_session.add(candidate)
+    db_session.commit()
+    return candidate
+
+
+# closes docs/drift.md row 29 — submission_count is a real COUNT, not a placeholder
+def test_list_jobs_submission_count_reflects_real_candidates(
+    authed_client: TestClient, db_session: Session
 ) -> None:
-    response = authed_client.post(f"/api/v1/jobs/{fixtures.JOB_DRAFT_ID}/process")
-    assert response.status_code == 409
+    template = _create_template(authed_client)
+    job_with_candidates = _create_job(authed_client, template["template_id"], "Role A")
+    job_without = _create_job(authed_client, template["template_id"], "Role B")
 
-    response = authed_client.post(f"/api/v1/jobs/{fixtures.JOB_CLOSED_ID}/process")
-    assert response.status_code == 202
-    body = response.json()
-    assert body["task_id"]
+    job_id = uuid.UUID(job_with_candidates["job_id"])
+    _add_candidate(db_session, job_id, "one@example.com")
+    _add_candidate(db_session, job_id, "two@example.com")
+    _add_candidate(db_session, job_id, "soft-deleted@example.com", deleted=True)
 
-    poll = authed_client.get(f"/api/v1/tasks/{body['task_id']}")
-    assert poll.status_code == 200
+    response = authed_client.get("/api/v1/jobs")
+    assert response.status_code == 200
+    by_id = {item["job_id"]: item for item in response.json()["items"]}
+    assert by_id[job_with_candidates["job_id"]]["submission_count"] == 2
+    assert by_id[job_without["job_id"]]["submission_count"] == 0
 
 
-def test_process_status_computed_counts(
-    authed_client: TestClient, seeded_stub_jobs: list[JobPosting]
+def test_job_detail_submission_counts_zero_filled_by_status(
+    authed_client: TestClient, db_session: Session
 ) -> None:
-    response = authed_client.get(f"/api/v1/jobs/{fixtures.JOB_LIVE_ID}/process/status")
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    job_id = uuid.UUID(job["job_id"])
+    _add_candidate(db_session, job_id, "submitted@example.com", status="SUBMITTED")
+    _add_candidate(db_session, job_id, "parsed@example.com", status="PARSED")
+
+    response = authed_client.get(f"/api/v1/jobs/{job['job_id']}")
     assert response.status_code == 200
     body = response.json()
-    assert body["total"] == body["processed"] + body["failed"]
-    assert body["failed"] >= 1
+    assert body["submission_count"] == 2
+    assert body["submission_counts"]["SUBMITTED"] == 1
+    assert body["submission_counts"]["PARSED"] == 1
+    assert body["submission_counts"]["REJECTED"] == 0

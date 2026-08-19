@@ -5,18 +5,22 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import event
 from sqlalchemy.orm import Session
 
 from app.adapters.google.oauth import GoogleTokens, GoogleUserInfo
 from app.api import fixtures
 from app.api.deps import get_db
 from app.core.config import settings
-from app.core.db import SessionLocal
+from app.core.db import SessionLocal, engine
 from app.main import app
 from app.models.api_usage_log import ApiUsageLog
+from app.models.background_task import BackgroundTask
+from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter, RecruiterState
 from app.models.template import FormTemplate
+from app.worker import celery_app
 
 
 @pytest.fixture(autouse=True)
@@ -30,10 +34,30 @@ def _local_storage_root(tmp_path: Path) -> Generator[None, None, None]:
 
 
 @pytest.fixture
+def celery_eager() -> Generator[None, None, None]:
+    """No live worker in CI (US-15/16 AC) — .delay() runs the task inline, in
+    the same process, and exceptions propagate instead of vanishing into a
+    broker no test can inspect. Opt-in, not autouse: tests that only exercise
+    the enqueue path (409s, one-row-per-job) mock resume_parse_job.delay
+    instead, so the task body's own execution never bleeds into their
+    assertions about background_tasks.status immediately after 202."""
+    original_eager = celery_app.conf.task_always_eager
+    original_propagates = celery_app.conf.task_eager_propagates
+    celery_app.conf.task_always_eager = True
+    celery_app.conf.task_eager_propagates = True
+    yield
+    celery_app.conf.task_always_eager = original_eager
+    celery_app.conf.task_eager_propagates = original_propagates
+
+
+@pytest.fixture
 def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
-    # FK order: JobPosting references FormTemplate, so it must go first.
+    # FK order: BackgroundTask/CandidateFormResponse -> Candidate -> JobPosting -> FormTemplate.
+    session.query(BackgroundTask).delete()
+    session.query(CandidateFormResponse).delete()
+    session.query(Candidate).delete()
     session.query(JobPosting).delete()
     session.query(ApiUsageLog).delete()
     session.query(FormTemplate).delete()
@@ -128,6 +152,28 @@ def seeded_stub_jobs(authed_client: TestClient, db_session: Session) -> list[Job
         jobs.append(row)
     db_session.commit()
     return jobs
+
+
+class QueryCounter:
+    def __init__(self) -> None:
+        self.count = 0
+
+
+@pytest.fixture
+def query_counter() -> Generator[QueryCounter, None, None]:
+    """TC-10: counts statements executed against the engine while the fixture
+    is active, so a test can assert a route issues a bounded, page-size-
+    independent number of queries (never an N+1 over a per-row loop)."""
+    counter = QueryCounter()
+
+    def _on_execute(*args: object, **kwargs: object) -> None:
+        counter.count += 1
+
+    event.listen(engine, "before_cursor_execute", _on_execute)
+    try:
+        yield counter
+    finally:
+        event.remove(engine, "before_cursor_execute", _on_execute)
 
 
 @pytest.fixture

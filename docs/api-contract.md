@@ -52,11 +52,13 @@ these. Summary:
   for cases where ownership is already established but the action isn't permitted.
 - Timestamps: ISO 8601 UTC.
 
-Key error codes: `REAUTH_REQUIRED` (409), `JOB_EXPIRED` (410), `JOB_NOT_ACCEPTING` (409),
-`DUPLICATE_SUBMISSION` (409), `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413),
-`QUOTA_EXCEEDED` (503), `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409),
-`TEMPLATE_IN_USE` (409), `DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401),
-`VALIDATION_ERROR` (422, ADR-004 P9).
+Key error codes: `REAUTH_REQUIRED` (409), `JOB_CLOSED` (410), `DUPLICATE_SUBMISSION` (409),
+`UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413), `QUOTA_EXCEEDED` (503),
+`TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409), `TEMPLATE_IN_USE` (409),
+`DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9).
+`JOB_CLOSED` (US-11) replaces the earlier `JOB_EXPIRED`/`JOB_NOT_ACCEPTING` split — one
+code, `details: {job_title, reason}` where `reason` is `CLOSED | EXPIRED | PAUSED`, so
+the frontend still knows which of the three gating conditions failed without three codes.
 Per-resource `{RESOURCE}_NOT_FOUND` codes (`JOB_NOT_FOUND`, `CANDIDATE_NOT_FOUND`, etc.)
 follow the obvious pattern and aren't enumerated individually.
 
@@ -98,6 +100,11 @@ without hitting the `(template_id, field_order)` UNIQUE constraint.
 references the template (US-06 wired the real check against `job_postings`; drift
 row 27 closed).
 
+`POST` and `PUT` return 422 `TEMPLATE_MISSING_IDENTITY_FIELD` when no field resolves
+to an email or a full name by normalised label match (US-12) — candidates are
+identified by those two columns and the form is template-driven, so a template that
+can't answer them would only fail later, as a candidate-facing 500 at submission time.
+
 ## Jobs
 | Method | Path | Notes |
 |---|---|---|
@@ -107,6 +114,14 @@ row 27 closed).
 | PATCH | `/jobs/{id}` | JD edit, TTL extend/revoke, `is_accepting_responses`, `status` |
 | DELETE | `/jobs/{id}` | Phase 2 (US-09/US-10) — out of scope; US-06 explicitly excludes edit/TTL-extend/delete from Phase 1 |
 | POST | `/jobs/{id}/process` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED and candidates exist |
+| GET | `/jobs/{id}/process/status` | `ProcessStatusOut` — `total`/`processed`/`failed` computed from `candidates.submission_status`, not task state |
+
+**`POST /jobs/{id}/process` 409s, US-15/16.** Three distinct codes, checked in this
+order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE` task for this job is already
+`PENDING`/`RUNNING` — enforced by a partial unique index, not just a pre-check),
+`INVALID_STATE_TRANSITION` (job isn't `CLOSED`), `NO_CANDIDATES` (job has zero live
+candidates). The `background_tasks` row is written before the Celery task is
+dispatched, so a trace exists even if the broker never picks it up.
 
 **No close action endpoint.** Closing a job is `PATCH /jobs/{id}` with
 `{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a
@@ -130,13 +145,33 @@ ambiguous.
 ## Public — no auth
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. 410 if expired |
-| POST | `/api/v1/public/apply/{apply_slug}` | multipart. Rate-limited by IP |
+| GET | `/api/v1/public/apply/{apply_slug}` | job title, JD, field definitions. Unknown slug, soft-deleted, or DRAFT → 404. CLOSED/paused/expired → 410 `JOB_CLOSED` |
+| POST | `/api/v1/public/apply/{apply_slug}` | multipart: a `resume` file part plus one part per template field, keyed by `field_id` (the UUID from `GET`'s `fields[].field_id`) |
 
 The only two unauthenticated endpoints in the system, mounted as a separate
-`APIRouter` under `/api/v1/public/*` (P1) so rate limiting and "no auth dependency
-here" are enforced at the router level. Rate limit them, validate file type by magic
-bytes not extension, cap size at 5MB.
+`APIRouter` under `/api/v1/public/*` (P1) so "no auth dependency here" is enforced at
+the router level. Rate limiting by IP is a documented gap, not built (`docs/drift.md`
+row 36) — out of scope for US-12, belongs in deployment configuration.
+
+`POST /public/apply/{apply_slug}` (US-12):
+- 404 `JOB_NOT_FOUND` / 410 `JOB_CLOSED` — identical to `GET`, via the same
+  `job_service.assert_job_accepting`.
+- 422 `MISSING_REQUIRED_FIELD` — a required field (or the resolved email/full-name
+  field, regardless of its `is_required` flag) is missing or blank.
+- 422 `UNKNOWN_FIELD` — a submitted key isn't a UUID, or is a UUID not belonging to
+  this job's template. Never silently dropped.
+- 422 `VALIDATION_ERROR` — malformed email, or a free-text response over 5000 characters.
+- 409 `DUPLICATE_SUBMISSION` — `(job_id, email)` already has a non-deleted candidate.
+- 413 `FILE_TOO_LARGE` — resume exceeds `MAX_RESUME_MB` (5MB). Enforced by counting
+  bytes as the upload streams, never by trusting `Content-Length`.
+- 415 `UNSUPPORTED_FILE_TYPE` — file type decided by magic bytes only (`.pdf`, `.doc`,
+  `.docx`), never the extension or the client's declared `Content-Type`.
+- 422 `EMPTY_FILE` — 0-byte upload.
+- 500 `RESUME_UPLOAD_FAILED` (local) / 502 (cloud) — storage failed; no candidate row
+  is created (resume is stored *before* the candidate row commits, same ordering as
+  US-06's job-launch flow).
+- 500 `TEMPLATE_MISSING_IDENTITY_FIELD` — unreachable in practice; `template_service`
+  rejects a template missing an email/full-name-resolvable field at save time.
 
 **Not the same URL as the SPA route.** Candidates visit `/apply/{slug}` in the
 browser — that's the React app route (ADR-001), not an API endpoint. `JobOut.apply_url`
@@ -149,9 +184,16 @@ when wiring frontend links.
 | GET | `/jobs/{id}/candidates` | raw submissions, `Page[CandidateOut]`, dynamic columns; `?submission_status=` |
 | GET | `/jobs/{id}/candidates/ranked` | `Page[RankedCandidateOut]`, sorted by `rank_position`; `?min_score=&skill=` |
 | GET | `/candidates/{id}` | profile + responses + AI result + resume URL |
+| GET | `/candidates/{id}/resume` | US-13, not in the original TS-02 contract (drift row 37). Authenticated, ownership-scoped, streams the file. **Local mode only** — always 404 `RESUME_NOT_FOUND` in cloud mode |
 | GET | `/candidates/{id}/evidence` | Phase 2 (US-23) — out of scope |
 | GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8) |
 | PATCH | `/candidates/{id}` | status changes |
+
+`resume_url` (`CandidateOut`) is opaque to the client in either mode — the frontend
+renders it as a link without caring which it is. In cloud mode it's the Drive
+`webViewLink`; in local mode it's `GET /candidates/{id}/resume`, never the raw
+`resume_storage_key` path. The download route has no cloud-mode behaviour of its own
+(no redirect) because `resume_storage_key` is always NULL there — see drift row 37.
 
 Candidates that failed parsing are **not** a second list embedded in the ranked
 response. They're retrieved from `GET /jobs/{id}/candidates?submission_status=PARSE_ERROR`

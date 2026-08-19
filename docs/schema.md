@@ -155,15 +155,28 @@ INDEX on (recruiter_id, status), and (expires_at) WHERE status = 'LIVE'.
 | submission_status | submission_status_enum | NOT NULL, DEFAULT 'SUBMITTED' |
 | submitted_at | TIMESTAMPTZ | NOT NULL |
 | parse_error | TEXT | NULL |
+| resume_text | TEXT | NULL — set on `PARSED` (US-15/16, drift #40) |
 | deleted_at | TIMESTAMPTZ | NULL |
 
 A candidate is scoped to one job. Same person, two jobs = two rows.
-UNIQUE (job_id, email) — prevents double submission to the same posting.
+UNIQUE (job_id, email) — prevents double submission to the same posting. **Partial**:
+`WHERE deleted_at IS NULL`, same precedent as `form_templates`' name index, so a
+soft-deleted candidate frees its email for re-application (landed in US-12).
+
+`resume_text` (US-15/16) holds the extracted resume text once `submission_status`
+reaches `PARSED`. Lives here, not on `ai_analysis_results.resume_text_extracted`
+below — that table doesn't exist until US-18 (drift #40). `submission_status`
+transitions follow `candidate_service._LEGAL_TRANSITIONS` (drift #38, closed):
+`SUBMITTED`/`PARSE_ERROR` → `PARSED`/`PARSE_ERROR`; `PARSED` is never re-parsed.
+A resume with fewer than ~50 extracted characters (scanned/image-only PDF) is
+`PARSE_ERROR`, not an empty-string `PARSED` row — OCR is out of scope (drift #41).
 
 `resume_url` in API responses (`CandidateOut`) is a computed field, not a stored
-column — derived from `resume_drive_url` when `APP_ENV != local` or from
-`resume_storage_key` when `APP_ENV == local`. Clients never construct this URL
-themselves; they read whichever value the response layer resolved.
+column — `resume_drive_url` when `APP_ENV != local`, or `GET /candidates/{id}/resume`
+(US-13) when `APP_ENV == local`. `resume_storage_key` itself never reaches a client;
+it is an absolute server path, opened only by the download route after resolving it
+inside the job's resume folder. Clients never construct `resume_url` themselves; they
+read whichever value the response layer resolved.
 
 ### candidate_form_responses (weak)
 | Column | Type | Notes |
@@ -250,6 +263,11 @@ and let the UNIQUE constraint do the work — retries become harmless no-ops.
 
 Every Celery task writes a row here **on enqueue**, not on start. Otherwise a worker
 that dies before picking the job up leaves no trace, and US-34 has nothing to show.
+
+Implemented in US-15/16 (`RESUME_PARSE` only so far). One addition beyond this table:
+a partial UNIQUE index on `job_id WHERE task_type = 'RESUME_PARSE' AND status IN
+('PENDING', 'RUNNING')` — the actual concurrency guard behind the 409
+`PROCESSING_IN_PROGRESS` check, same precedent as `candidates`' partial unique index.
 
 ---
 

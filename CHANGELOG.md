@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+- US-15/16: `resume_parser.extract_text` glued icon-font glyphs directly onto
+  adjacent words (e.g. a phone number rendered as an unrenderable codepoint
+  immediately followed by the digits, no whitespace) — found on a real resume
+  during the manual live-worker smoke test that `task_always_eager` unit tests
+  can't reach. Icon fonts (phone/email/location pictograms, common in resume
+  templates) map their glyphs into the Unicode Private Use Areas; `pypdf`
+  faithfully returns whatever codepoint the font's cmap gives it, but there is
+  no real character behind it. Now stripped to a space (not deleted outright,
+  so words don't glue together) before the `MIN_CHARS` check. Left in, this
+  would have quietly degraded US-18's embeddings on every resume built from a
+  template using an icon font.
+
 ### Added
 - US-01 (frontend): homepage built from the Stitch Figma design (hero,
   features, how-it-works, footer) as a public route outside `AppShell`.
@@ -19,6 +32,172 @@
   is what surfaced the bug. `--color-primary` / `--color-primary-soft`
   updated to match the Figma design (`#0058be` / `#d8e2ff`) in both
   `tokens.css` and `docs/design.md`, replacing `#2563eb` / `#eff6ff`.
+- US-15/16 (commit 2 — extraction): the `RESUME_PARSE` task's per-candidate body is
+  real. `app/services/resume_parser.py` — `extract_text(content, ext) -> str`,
+  `pypdf` for PDF, `python-docx` for DOCX (including table-laid-out resumes, not just
+  top-level paragraphs — the real DOCX fixture is table-based and top-level-only
+  extraction silently returned empty text against it). Fewer than ~50 extracted
+  characters (a scanned/image-only PDF) is `ExtractionFailed` with a message distinct
+  from a corrupt-file failure — never a silent empty-string `PARSED` row that would
+  rank bottom in US-18 (`docs/drift.md` #41, OCR out of scope). A password-protected
+  PDF gets its own distinct message too.
+
+  `ResumeStore` gains `fetch_resume(recruiter, candidate) -> bytes` on the Protocol
+  and both implementations — extraction never opens a path directly.
+  `LocalResumeStore` reuses the same path-containment guard as `store_resume`;
+  `DriveResumeStore` is one `google_call` (`GET .../files/{id}?alt=media`).
+
+  Per candidate, in a loop that commits after each one so a single failure can never
+  roll back or abort the rest of the batch (**TC-05, the story's headline AC**): fetch
+  the resume, sniff its extension from magic bytes (`resume_validation.sniff_extension`
+  — never a filename, which doesn't survive in cloud mode either), extract text. Success
+  → `resume_text` set, `parse_error` cleared, `SUBMITTED`/`PARSE_ERROR` → `PARSED`.
+  Failure → `PARSE_ERROR` with the human-readable message, batch continues. Only
+  `SUBMITTED`/`PARSE_ERROR` candidates are selected — a re-trigger after a partial
+  failure only retries the failures, never re-parses an already-`PARSED` row.
+
+  Closes `docs/drift.md` row 38: `candidate_service._LEGAL_TRANSITIONS` (mirroring
+  `job_service`'s graph) gives `submission_status` a real legality graph for the first
+  time — `PATCH /candidates/{id}` now 409s `INVALID_STATE_TRANSITION` on an illegal
+  move (e.g. `PARSED` backwards to `SUBMITTED`). The retry AC is itself expressed as a
+  graph rule (`PARSED` has no path back to `PARSED`), not just a query filter.
+
+  `candidates.resume_text` migration — `ai_analysis_results` (schema.md's designated
+  home) doesn't exist until US-18, so extracted text lives on `candidates` for now
+  (`docs/drift.md` #40). One `RESUME_PARSE` task **per job**, not per candidate,
+  departs from `architecture.md`'s literal fan-out description (`docs/drift.md` #39) —
+  every AC/TC in the story describes a single `background_tasks` row per job.
+- US-15/16 (commit 1 — task plumbing): `POST /jobs/{job_id}/process` and
+  `GET /jobs/{job_id}/process/status` swap their TS-02 fixture stubs for a real Celery
+  task. `background_tasks` migration (`task_type_enum`/`task_status_enum` per
+  `docs/schema.md`) plus a partial UNIQUE index on
+  `job_id WHERE task_type='RESUME_PARSE' AND status IN ('PENDING','RUNNING')` — the
+  actual concurrency guard behind 409 `PROCESSING_IN_PROGRESS`; the enqueue path's
+  pre-check (`task_service.active_task_for_job`) is only the fast path, same
+  precedent as US-12's `uq_candidates_job_email`. The row is written **on enqueue,
+  not on worker start** — committed before `.delay()` is ever called, so a
+  worker/broker that never picks up the job still leaves a trace (verified directly:
+  a test that makes `.delay()` raise still finds the row `PENDING`).
+
+  `app/tasks/resume_parse.py` — one `RESUME_PARSE` Celery task **per job**, not per
+  candidate, departing from `architecture.md`'s literal fan-out description
+  (`docs/drift.md`): every AC and test case in the story describes a single
+  `background_tasks` row per job. Opens its **own** `SessionLocal()`, never a
+  session passed in from a request — same rule `adapters/google/session.py`
+  follows. `acks_late=True`, `max_retries=3`, `soft_time_limit`, exponential
+  backoff; `autoretry_for` is scoped to transient infrastructure failures only
+  (`OperationalError` for now — commit 2 adds the Google-call transient case), never
+  broad exceptions, since per-candidate failures are handled in-loop and retrying on
+  them would redo already-completed work. Idempotency key is the task's own
+  `task_id`: re-running an already-terminal (`SUCCESS`/`FAILED`) task is a no-op.
+  Commit 1's per-candidate body is a placeholder (`_process_job_candidates` does
+  nothing yet) — real extraction lands in commit 2.
+
+  `GET /process/status` counts are computed from `candidates.submission_status`
+  rows, never from task state (AC) — `processed` sums every status downstream of a
+  successful parse, `failed` is `PARSE_ERROR`.
+
+  Tests run Celery eagerly (`celery_app.conf.task_always_eager`, opt-in per test via
+  a `celery_eager` fixture) — no live worker needed in CI.
+- US-13: `GET /jobs/{job_id}/candidates`, `GET /candidates/{id}`, and
+  `PATCH /candidates/{id}` swap their TS-02 fixture stubs for real queries — the
+  first time a recruiter can see what's actually been submitted. Closes a live
+  tenant-isolation gap along the way: `deps.get_owned_candidate` previously
+  resolved a candidate from an in-memory dict with **no `recruiter_id` scoping at
+  all**; it's now one query joined through the owning job, the only ownership path
+  for candidates.
+
+  List and detail are both bounded regardless of page size or answer count — the
+  list response carries no `form_responses`, so it never touches
+  `candidate_form_responses` or `template_fields`; the detail route joins both in
+  one query rather than resolving each response's `field_label` individually.
+  `?submission_status=` hits `ix_candidates_job_status`; `?q=` does an
+  `ILIKE` over name/email, consistent with `list_jobs`.
+
+  New route, not in the TS-02 contract (`docs/drift.md` row 37):
+  `GET /candidates/{id}/resume` — authenticated, ownership-scoped, streams the
+  file from `LOCAL_STORAGE_ROOT` after asserting the resolved path is inside the
+  job's folder (defence in depth, same precedent as US-12). **Local mode only** —
+  `resume_storage_key` is always NULL in cloud mode, so the route inertly 404s
+  there and `resume_url` resolves to the Drive `webViewLink` instead; no redirect
+  variant was built. `resume_url` is opaque to the client in either mode.
+  `Content-Disposition` uses the server-generated stored filename, never anything
+  candidate-supplied, and defaults to `attachment` — a malicious PDF can't execute
+  in the recruiter's browser origin.
+
+  `PATCH /candidates/{id}` accepts any valid `submission_status` with no legality
+  graph (drift row 38) — candidates have no defined transition rules, unlike jobs.
+
+- US-12: `POST /public/apply/{apply_slug}` is real — the biggest attack surface in
+  the system, unauthenticated and accepting a file upload. `candidates` and
+  `candidate_form_responses` migration per `docs/schema.md`, with a **partial**
+  UNIQUE `(job_id, email) WHERE deleted_at IS NULL` (a soft-deleted candidate frees
+  its email for re-application, same precedent as US-04's template-name index).
+  Closes `docs/drift.md` row 29: `job_service.submission_counts_by_job` /
+  `submission_counts_by_status` replace the hardcoded placeholder with real
+  `GROUP BY` queries, each scoped to a page or a single job.
+
+  File acceptance (`app/services/resume_validation.py`) never trusts the client:
+  type is decided purely from magic bytes (`%PDF-`, the OLE2 header, or a ZIP whose
+  entries include `[Content_Types].xml` + `word/*` for `.docx` — a bare ZIP header
+  isn't enough, since `.zip`/`.jar` share it), and the 5MB cap is enforced by
+  counting bytes as `read_capped` streams them, never by trusting `Content-Length`.
+  A best-effort `Content-Length` pre-gate on the route rejects the common
+  grossly-oversized case before the body is parsed at all; `read_capped` is what
+  actually enforces the cap either way. The stored filename is always
+  `{uuid4}.{validated-extension}` — the candidate's raw filename never reaches the
+  filesystem or Drive.
+
+  `ResumeStore` gains `store_resume(recruiter, job, filename, content) -> StoredFile`.
+  `LocalResumeStore` writes under `LOCAL_STORAGE_ROOT/resumes/{job_id}/`, with a
+  resolved-path check as defence in depth against path traversal. `DriveResumeStore`
+  does one `multipart/related` upload via `google_call` (not a create-then-patch-media
+  two-call sequence, which would double-log `api_usage_logs` for a single upload).
+  Ordering matches US-06: the resume is stored *first*, then the candidate row
+  commits with the resulting key — a DB failure never leaves a row pointing at a
+  file that doesn't exist, and a storage failure leaves no row at all.
+
+  `app/services/identity_fields.py` resolves which template field answers a
+  candidate's email/full name by a normalised label match — the single place both
+  `template_service` (reject a template missing either at save time, 422
+  `TEMPLATE_MISSING_IDENTITY_FIELD`) and `candidate_service` (read the answer at
+  submission time) agree on what counts as "the email field". Validating at template
+  save time, not just submission time, means a misconfigured template is the
+  recruiter's error to fix, not a candidate-facing 500 mid-application.
+
+  `candidate_service.submit_application` calls `job_service.assert_job_accepting`
+  (the same US-11 function, not a second copy) before writing anything. An
+  unrecognized `field_id` — whether it isn't a UUID at all or belongs to another
+  template — is 422 `UNKNOWN_FIELD`, not silently dropped. Free-text responses are
+  capped at 5000 characters in Pydantic (`response_value` is unbounded `TEXT`).
+  `POST /public/apply/{slug}` is the one `async def` route in the codebase, solely so
+  it can `await request.form()` for the `field_id`-keyed parts FastAPI already parsed
+  to resolve `resume: UploadFile`; all blocking work (DB, and in cloud mode
+  `google_call`'s sleep-based retry) runs via `run_in_threadpool`, since `google_call`
+  must never block the event loop.
+
+  Amends two AC numbers from the story text against `docs/api-contract.md`, which
+  predates it: the size cap is 5MB, not 10MB, and file-shape rejections are
+  413/415, not 422 (`docs/drift.md`).
+
+- US-11: `GET /public/apply/{apply_slug}` — the first unauthenticated, no-session
+  endpoint in the system — is real. `job_service.get_job_by_slug` looks up by
+  `apply_slug` only (never `job_id`), scoped to non-deleted rows, and
+  `assert_job_accepting` holds the single three-condition check
+  (`LIVE AND is_accepting_responses AND now < expires_at`) that US-12 will call
+  before writing a submission. Unknown slug, soft-deleted, and DRAFT jobs all
+  404 identically — a draft is unlaunched, not closed, and a distinguishable
+  response would leak that a posting exists before the recruiter shares it.
+  CLOSED/paused/expired jobs 410 with a new `JOB_CLOSED` code carrying
+  `details: {job_title, reason}` (`reason` ∈ `CLOSED | EXPIRED | PAUSED`),
+  replacing the earlier `JOB_EXPIRED`/`JOB_NOT_ACCEPTING` split (`docs/drift.md`
+  rows 30–31). Raised as a new `JobNotAccepting` domain exception
+  (`app/core/exceptions.py`), mapped to 410 by one handler in `main.py` —
+  same pattern as `ReauthRequired` — so the check stays callable outside a
+  FastAPI route. `PublicJobOut` exposes only `job_title`, `job_description`,
+  `fields`, `is_accepting_responses`, `expires_at`; `TemplateFieldOut.field_id`
+  is the one UUID that survives, deliberately, as the FK key US-12's submission
+  payload needs.
 - US-06: Job launch gets real persistence, the first `google_call`-backed route,
   and the first resource adapter. `job_postings` migration (`job_status_enum`,
   UNIQUE `apply_slug`, `(recruiter_id, status)` index, partial index on

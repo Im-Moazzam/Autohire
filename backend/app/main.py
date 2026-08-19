@@ -16,7 +16,7 @@ from app.api.routes.scheduling import router as scheduling_router
 from app.api.routes.tasks import router as tasks_router
 from app.api.routes.templates import router as templates_router
 from app.core.config import settings
-from app.core.exceptions import ReauthRequired
+from app.core.exceptions import JobNotAccepting, ReauthRequired
 from app.schemas.common import ErrorOut
 
 app = FastAPI(title="AutoHire")
@@ -34,6 +34,16 @@ app.add_middleware(
 def reauth_required_handler(request: Request, exc: ReauthRequired) -> JSONResponse:
     body = ErrorOut(code="REAUTH_REQUIRED", message="Google authorization has expired.")
     return JSONResponse(status_code=409, content=body.model_dump())
+
+
+@app.exception_handler(JobNotAccepting)
+def job_not_accepting_handler(request: Request, exc: JobNotAccepting) -> JSONResponse:
+    body = ErrorOut(
+        code="JOB_CLOSED",
+        message="This posting is no longer accepting applications.",
+        details={"job_title": exc.job_title, "reason": exc.reason},
+    )
+    return JSONResponse(status_code=410, content=body.model_dump())
 
 
 @app.exception_handler(StarletteHTTPException)

@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
 from app.api import fixtures
-from app.api.deps import get_current_recruiter, get_owned_candidate, get_owned_job
+from app.api.deps import get_current_recruiter, get_db, get_owned_candidate, get_owned_job
+from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.schemas.candidate import (
     CandidateDetailOut,
@@ -11,6 +14,7 @@ from app.schemas.candidate import (
 )
 from app.schemas.common import Page, PaginationParams, error_responses, paginate, pagination_params
 from app.schemas.enums import SubmissionStatus
+from app.services import candidate_service
 
 job_candidates_router = APIRouter(
     prefix="/jobs",
@@ -23,21 +27,40 @@ candidates_router = APIRouter(
     dependencies=[Depends(get_current_recruiter)],
 )
 
+_RESUME_NOT_FOUND = {
+    "code": "RESUME_NOT_FOUND",
+    "message": "No resume is stored for this candidate.",
+}
 
-def _to_candidate_out(candidate: dict) -> CandidateOut:
-    return CandidateOut(**candidate, resume_url=fixtures.resume_url_for(candidate))
+_MIME_BY_EXT = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "doc": "application/msword",
+}
+
+
+def _to_candidate_out(candidate: Candidate) -> CandidateOut:
+    return CandidateOut(
+        candidate_id=candidate.candidate_id,
+        full_name=candidate.full_name,
+        email=candidate.email,
+        phone_number=candidate.phone_number,
+        submission_status=candidate.submission_status,
+        submitted_at=candidate.submitted_at,
+        parse_error=candidate.parse_error,
+        resume_url=candidate_service.resume_url_for(candidate),
+    )
 
 
 def _to_ranked_out(candidate: dict) -> RankedCandidateOut:
     return RankedCandidateOut(**candidate, resume_url=fixtures.resume_url_for(candidate))
 
 
-def _to_detail_out(candidate: dict) -> CandidateDetailOut:
-    base = {k: v for k, v in candidate.items() if k != "form_responses"}
+def _to_detail_out(db: Session, candidate: Candidate) -> CandidateDetailOut:
+    base = _to_candidate_out(candidate)
     return CandidateDetailOut(
-        **base,
-        resume_url=fixtures.resume_url_for(candidate),
-        form_responses=fixtures.form_responses_for(candidate),
+        **base.model_dump(),
+        form_responses=candidate_service.form_responses(db, candidate.candidate_id),
     )
 
 
@@ -51,15 +74,17 @@ def list_candidates(
     q: str | None = Query(default=None),
     job: JobPosting = Depends(get_owned_job),
     params: PaginationParams = Depends(pagination_params),
+    db: Session = Depends(get_db),
 ) -> Page[CandidateOut]:
-    # STUB: US-13 — parse-failed candidates are a filter over this one collection
-    # (?submission_status=PARSE_ERROR), never a second list (ADR-004 P2).
-    candidates = fixtures.candidates_for_job(job.job_id)
-    if submission_status is not None:
-        candidates = [c for c in candidates if c["submission_status"] == submission_status]
-    if q:
-        candidates = [c for c in candidates if q.lower() in c["full_name"].lower()]
-    return paginate([_to_candidate_out(c) for c in candidates], params)
+    candidates, total = candidate_service.list_candidates(
+        db, job.job_id, params, submission_status, q
+    )
+    return Page[CandidateOut](
+        items=[_to_candidate_out(c) for c in candidates],
+        total=total,
+        page=params.page,
+        size=params.size,
+    )
 
 
 @job_candidates_router.get(
@@ -88,19 +113,60 @@ def list_ranked_candidates(
 @candidates_router.get(
     "/{candidate_id}", response_model=CandidateDetailOut, responses=error_responses(401, 404)
 )
-def get_candidate(candidate: dict = Depends(get_owned_candidate)) -> CandidateDetailOut:
-    # STUB: US-13
-    return _to_detail_out(candidate)
+def get_candidate(
+    candidate: Candidate = Depends(get_owned_candidate), db: Session = Depends(get_db)
+) -> CandidateDetailOut:
+    return _to_detail_out(db, candidate)
+
+
+@candidates_router.get(
+    "/{candidate_id}/resume",
+    response_class=FileResponse,
+    responses=error_responses(401, 404),
+)
+def download_resume(candidate: Candidate = Depends(get_owned_candidate)) -> FileResponse:
+    # Local mode only — resume_storage_key is always None in cloud mode
+    # (candidate_service.submit_application only sets it when APP_ENV=local),
+    # so this 404s there and the frontend uses resume_url's Drive link instead.
+    # Never build a redirect to a client-declared storage_key/webViewLink pair:
+    # the path is asserted inside the job's folder before it is ever opened,
+    # defence in depth on top of the server-generated filename (same as US-12).
+    path = candidate_service.resolve_resume_path(candidate)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_RESUME_NOT_FOUND)
+    extension = path.suffix.lstrip(".").lower()
+    media_type = _MIME_BY_EXT.get(extension, "application/octet-stream")
+    # filename is the stored basename (server-generated uuid4 + extension) —
+    # never the candidate's original filename, so nothing candidate-supplied
+    # reaches a response header. FileResponse defaults to Content-Disposition:
+    # attachment, so a malicious PDF can't execute in the recruiter's origin.
+    return FileResponse(path=path, media_type=media_type, filename=path.name)
 
 
 @candidates_router.patch(
     "/{candidate_id}",
     response_model=CandidateDetailOut,
-    responses=error_responses(401, 404, 422),
+    responses=error_responses(401, 404, 409, 422),
 )
 def update_candidate(
-    payload: CandidateUpdate, candidate: dict = Depends(get_owned_candidate)
+    payload: CandidateUpdate,
+    candidate: Candidate = Depends(get_owned_candidate),
+    db: Session = Depends(get_db),
 ) -> CandidateDetailOut:
-    # STUB: US-13
-    updated = {**candidate, "submission_status": payload.submission_status}
-    return _to_detail_out(updated)
+    if not candidate_service.is_legal_transition(
+        candidate.submission_status, payload.submission_status
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "INVALID_STATE_TRANSITION",
+                "message": (
+                    f"Cannot transition candidate from {candidate.submission_status} "
+                    f"to {payload.submission_status}."
+                ),
+            },
+        )
+    candidate.submission_status = payload.submission_status
+    db.commit()
+    db.refresh(candidate)
+    return _to_detail_out(db, candidate)
