@@ -16,6 +16,35 @@
   template using an icon font.
 
 ### Added
+- US-04 (frontend): Templates screen — list, create, edit, delete — built
+  against the real CRUD backend from US-04. Also lands the recruiter app
+  shell (`Sidebar`, `Header`) that every future authenticated screen hangs
+  off: nav items without a route yet (Jobs, Candidates, Scheduling, Emails,
+  Settings, Admin Monitoring) render disabled rather than as dead links.
+  `AppShell` now gates the whole subtree on a real session (loading/error/
+  redirect), so `Dashboard` no longer duplicates that check itself.
+
+  All five UX states covered: loading and error skeletons come from
+  `DataTable`'s existing states; empty state on zero templates; a "some
+  templates loaded, one action failed" partial case via toast on a failed
+  delete without dropping the rest of the list; success via toast + list
+  refresh. The builder validates inline — template name on blur, everything
+  else (empty field labels, `DROPDOWN`/`MULTIPLE_CHOICE` fields missing
+  options, and the identity-fields check mirroring
+  `identity_fields.resolve_identity_fields`) on submit — and focuses the
+  first invalid field per `docs/checklists/ux.md`'s interaction floor.
+  `DUPLICATE_TEMPLATE_NAME` (409) lands on the name field specifically;
+  everything else is a form-level banner.
+
+  `Input` (`components/ui`) now forwards its ref — needed to focus the
+  first invalid field on a failed submit, and the kind of primitive gap
+  `CLAUDE.md` says to fix in the shared component, not work around per-page.
+
+  Verified end-to-end against the real backend: full create/edit
+  (`field_id` reconciliation)/delete cycle via a real Google-authenticated
+  session, plus every error path (`DUPLICATE_TEMPLATE_NAME`,
+  `TEMPLATE_MISSING_IDENTITY_FIELD`, options-required) via `curl` against
+  the seeded local recruiter.
 - US-01 (frontend): homepage built from the Stitch Figma design (hero,
   features, how-it-works, footer) as a public route outside `AppShell`.
   Login/Sign up/Get started now navigate to the real

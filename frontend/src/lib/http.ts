@@ -52,3 +52,23 @@ export const api = {
     }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
 };
+
+/** Every backend error is `ErrorOut` — {code, message, details} — including
+ * 422s (main.py's validation_exception_handler normalizes those too). Falls
+ * back to a generic message for anything that isn't an ApiError at all
+ * (a network failure never reaches the backend, so it has no ErrorOut body). */
+export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Try again."): string {
+  if (err instanceof ApiError) {
+    const body = err.body as { message?: string } | null;
+    if (body?.message) return body.message;
+  }
+  return fallback;
+}
+
+export function apiErrorCode(err: unknown): string | undefined {
+  if (err instanceof ApiError) {
+    const body = err.body as { code?: string } | null;
+    return body?.code;
+  }
+  return undefined;
+}

@@ -5,6 +5,8 @@ import { Home } from "./pages/Home";
 import { Apply } from "./pages/Apply";
 import { Dashboard } from "./pages/Dashboard";
 import { AuthError } from "./pages/AuthError";
+import { Templates } from "./pages/Templates";
+import { TemplateBuilder } from "./pages/TemplateBuilder";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -20,11 +22,14 @@ const devRoutes = import.meta.env.DEV
 
 export const router = createBrowserRouter([
   { path: "/", element: <Home /> },
+  { path: "/auth/error", element: <AuthError /> },
   {
     element: <AppShell />,
     children: [
       { path: "/dashboard", element: <Dashboard /> },
-      { path: "/auth/error", element: <AuthError /> },
+      { path: "/templates", element: <Templates /> },
+      { path: "/templates/new", element: <TemplateBuilder /> },
+      { path: "/templates/:templateId/edit", element: <TemplateBuilder /> },
     ],
   },
   {
