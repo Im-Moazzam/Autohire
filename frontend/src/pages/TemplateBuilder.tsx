@@ -67,6 +67,13 @@ export function TemplateBuilder() {
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const fieldLabelRefs = useRef(new Map<string, HTMLInputElement>());
+  const [focusFieldKey, setFocusFieldKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!focusFieldKey) return;
+    fieldLabelRefs.current.get(focusFieldKey)?.focus();
+    setFocusFieldKey(null);
+  }, [focusFieldKey]);
 
   useEffect(() => {
     if (existing.data) {
@@ -112,6 +119,12 @@ export function TemplateBuilder() {
 
   function removeField(key: string) {
     setFields((prev) => prev.filter((f) => f.key !== key));
+  }
+
+  function addField() {
+    const field = newField();
+    setFields((prev) => [...prev, field]);
+    setFocusFieldKey(field.key);
   }
 
   function moveField(index: number, direction: -1 | 1) {
@@ -214,23 +227,14 @@ export function TemplateBuilder() {
       />
 
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-card font-semibold">Fields</h2>
-          <button
-            type="button"
-            onClick={() => setFields((prev) => [...prev, newField()])}
-            className="text-body text-primary hover:underline"
-          >
-            + Add field
-          </button>
-        </div>
+        <h2 className="text-card font-semibold">Fields</h2>
 
         {fields.length === 0 ? (
           <div className="rounded-card border border-dashed border-border p-8 text-center">
             <p className="text-body text-muted">No fields yet.</p>
             <button
               type="button"
-              onClick={() => setFields((prev) => [...prev, newField()])}
+              onClick={addField}
               className="mt-2 text-body text-primary hover:underline"
             >
               Add your first field
@@ -307,6 +311,16 @@ export function TemplateBuilder() {
               </div>
             </div>
           ))
+        )}
+
+        {fields.length > 0 && (
+          <button
+            type="button"
+            onClick={addField}
+            className="self-start rounded-control border border-dashed border-border px-4 py-2 text-body text-primary hover:bg-primary-soft"
+          >
+            + Add field
+          </button>
         )}
       </div>
 
