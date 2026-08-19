@@ -2,6 +2,9 @@ export type Status =
   | "Active"
   | "Expired"
   | "Draft"
+  | "Live"
+  | "Closed"
+  | "Processed"
   | "Processing"
   | "Scheduled"
   | "Interview Invited"
@@ -20,6 +23,9 @@ const statusTone: Record<Status, Tone> = {
   Active: "success",
   Expired: "muted",
   Draft: "muted",
+  Live: "success",
+  Closed: "muted",
+  Processed: "primary",
   Processing: "ai",
   Scheduled: "primary",
   "Interview Invited": "primary",

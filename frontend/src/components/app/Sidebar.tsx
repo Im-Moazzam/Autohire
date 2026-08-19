@@ -1,5 +1,5 @@
 import type { ReactNode, SVGProps } from "react";
-import { NavLink } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 
 function GridIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -92,7 +92,7 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: GridIcon },
   { label: "Templates", to: "/templates", icon: FileTextIcon },
-  { label: "Jobs", icon: BriefcaseIcon },
+  { label: "Jobs", to: "/jobs", icon: BriefcaseIcon },
   { label: "Candidates", icon: UsersIcon },
   { label: "Scheduling", icon: CalendarIcon },
   { label: "Emails", icon: MailIcon },
@@ -112,15 +112,13 @@ export function Sidebar() {
         <span className="text-card font-extrabold">AutoHire</span>
       </div>
 
-      <button
-        type="button"
-        disabled
-        title="Coming soon — job launch isn't built yet"
-        className="mb-4 flex items-center justify-center gap-2 rounded-control bg-primary/40 px-4 py-3 text-body font-semibold text-white cursor-not-allowed"
+      <Link
+        to="/jobs/new"
+        className="mb-4 flex items-center justify-center gap-2 rounded-control bg-primary px-4 py-3 text-body font-semibold text-white hover:bg-primary/90"
       >
         <PlusIcon className="h-4 w-4" />
         Post new job
-      </button>
+      </Link>
 
       <nav className="flex flex-1 flex-col gap-1" aria-label="Primary">
         {NAV_ITEMS.map((item) => {
