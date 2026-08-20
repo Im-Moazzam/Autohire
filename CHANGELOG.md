@@ -16,6 +16,22 @@
   template using an icon font.
 
 ### Added
+- US-01 (frontend): homepage built from the Stitch Figma design (hero,
+  features, how-it-works, footer) as a public route outside `AppShell`.
+  Login/Sign up/Get started now navigate to the real
+  `GET /api/v1/auth/google/login` instead of a stub route. `Dashboard` and
+  `AuthError` now check the real session via a new `useCurrentRecruiter()`
+  hook against `/auth/me`, resolving a 401 to `null` (logged out) rather
+  than throwing, since that's an expected state on these pages, not a fetch
+  failure. Fixed a real bug in the fetch wrapper along the way: it was
+  missing `credentials: "include"`, so the session cookie set by the API's
+  origin (`:8000`) was never sent back from the frontend's origin (`:5173`)
+  — every authenticated call would have silently looked logged-out.
+  Renamed `frontend/src/lib/api.ts` -> `http.ts` since it collided with the
+  generated `api.d.ts` module under TypeScript's module resolution, which
+  is what surfaced the bug. `--color-primary` / `--color-primary-soft`
+  updated to match the Figma design (`#0058be` / `#d8e2ff`) in both
+  `tokens.css` and `docs/design.md`, replacing `#2563eb` / `#eff6ff`.
 - US-15/16 (commit 2 — extraction): the `RESUME_PARSE` task's per-candidate body is
   real. `app/services/resume_parser.py` — `extract_text(content, ext) -> str`,
   `pypdf` for PDF, `python-docx` for DOCX (including table-laid-out resumes, not just

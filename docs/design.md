@@ -2,9 +2,9 @@
 source: Google Stitch — project 11424231694215614824
 name: AutoHire Web Design System
 colors:
-  primary: "#2563EB"
+  primary: "#0058BE"
   deep-navy: "#0F172A"
-  soft-blue-bg: "#EFF6FF"
+  soft-blue-bg: "#D8E2FF"
   accent-cyan: "#06B6D4"
   ai-purple: "#7C3AED"
   success-green: "#16A34A"
@@ -58,9 +58,9 @@ primarily blue, while warnings, errors, and success states follow the palette ru
 
 ## Colors
 
-- **Primary Blue (#2563EB)**: Main CTAs, key interactive elements
+- **Primary Blue (#0058BE)**: Main CTAs, key interactive elements
 - **Deep Navy (#0F172A)**: Headers, primary text
-- **Soft Blue Background (#EFF6FF)**: Subtle section backgrounds
+- **Soft Blue Background (#D8E2FF)**: Subtle section backgrounds
 - **Accent Cyan (#06B6D4)**: Highlights, secondary accents
 - **AI Purple (#7C3AED)**: AI analysis, semantic ranking, automation indicators
 - **Success Green (#16A34A)**: Completed actions, available slots, connected integrations
