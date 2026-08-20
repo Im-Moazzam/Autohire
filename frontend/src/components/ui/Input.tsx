@@ -1,5 +1,4 @@
-import type { InputHTMLAttributes } from "react";
-import { useId } from "react";
+import { forwardRef, useId, type InputHTMLAttributes } from "react";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
@@ -9,16 +8,19 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   isValidating?: boolean;
 }
 
-export function Input({
-  label,
-  helperText,
-  errorText,
-  isValidating = false,
-  disabled,
-  id,
-  className = "",
-  ...rest
-}: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  {
+    label,
+    helperText,
+    errorText,
+    isValidating = false,
+    disabled,
+    id,
+    className = "",
+    ...rest
+  },
+  ref,
+) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const helperId = `${inputId}-helper`;
@@ -30,6 +32,7 @@ export function Input({
       </label>
       <div className="relative">
         <input
+          ref={ref}
           id={inputId}
           disabled={disabled}
           aria-invalid={!!errorText}
@@ -60,4 +63,4 @@ export function Input({
       ) : null}
     </div>
   );
-}
+});

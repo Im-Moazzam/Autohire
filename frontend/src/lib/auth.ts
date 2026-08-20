@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, API_URL, ApiError } from "./http";
 import type { components } from "./api";
 
@@ -19,5 +19,13 @@ export function useCurrentRecruiter() {
         throw err;
       }
     },
+  });
+}
+
+export function useLogout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<void>("/auth/logout"),
+    onSuccess: () => queryClient.setQueryData(["auth", "me"], null),
   });
 }
