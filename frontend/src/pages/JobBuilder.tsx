@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, EmptyState, Input, Select, Textarea } from "../components/ui";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  Select,
+  Textarea,
+} from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
@@ -58,8 +65,13 @@ export function JobBuilder() {
   if (isEditing && existing.isError) {
     return (
       <div className="max-w-2xl">
-        <Card errorText={apiErrorMessage(existing.error, "Couldn't load this job.")} />
-        <Link to="/jobs" className="mt-4 inline-block text-body text-primary hover:underline">
+        <Card
+          errorText={apiErrorMessage(existing.error, "Couldn't load this job.")}
+        />
+        <Link
+          to="/jobs"
+          className="mt-4 inline-block text-body text-primary hover:underline"
+        >
           Back to jobs
         </Link>
       </div>
@@ -89,6 +101,7 @@ export function JobBuilder() {
 
   const mutation = isEditing ? updateJob : createJob;
   const canClose = isEditing && existing.data?.status === "LIVE";
+  const canRetryLaunch = isEditing && existing.data?.status === "DRAFT";
 
   function validateTitle(): boolean {
     if (!jobTitle.trim()) {
@@ -97,6 +110,38 @@ export function JobBuilder() {
     }
     setTitleError(undefined);
     return true;
+  }
+
+  /** Shared by the initial launch and a DRAFT retry — both call
+   * finalize_launch server-side and can fail the same way. */
+  function onLaunchError(err: unknown) {
+    if (apiErrorCode(err) === "RESUME_FOLDER_FAILED") {
+      const details = (err as { body?: { details?: { job_id?: string } } })
+        ?.body?.details;
+      setFormError(
+        "The job was saved, but its storage folder couldn't be created. Try launching it again.",
+      );
+      setRetryJobId(details?.job_id ?? jobId);
+      return;
+    }
+    setFormError(apiErrorMessage(err));
+  }
+
+  /** DRAFT -> LIVE retry after a RESUME_FOLDER_FAILED launch — PATCHing
+   * status re-runs the same finalize_launch the initial launch did. */
+  function handleRetryLaunch() {
+    setFormError(undefined);
+    setRetryJobId(undefined);
+    updateJob.mutate(
+      { status: "LIVE" },
+      {
+        onSuccess: () => {
+          showToast("Job launched.", "success");
+          navigate("/jobs");
+        },
+        onError: onLaunchError,
+      },
+    );
   }
 
   function handleSubmit() {
@@ -121,18 +166,6 @@ export function JobBuilder() {
       return;
     }
 
-    const onError = (err: unknown) => {
-      if (apiErrorCode(err) === "RESUME_FOLDER_FAILED") {
-        const details = (err as { body?: { details?: { job_id?: string } } })?.body?.details;
-        setFormError(
-          "The job was saved, but its storage folder couldn't be created. Try launching it again.",
-        );
-        setRetryJobId(details?.job_id ?? jobId);
-        return;
-      }
-      setFormError(apiErrorMessage(err));
-    };
-
     if (isEditing) {
       updateJob.mutate(
         {
@@ -145,7 +178,7 @@ export function JobBuilder() {
             showToast("Job saved.", "success");
             navigate("/jobs");
           },
-          onError,
+          onError: onLaunchError,
         },
       );
     } else {
@@ -161,7 +194,7 @@ export function JobBuilder() {
             showToast("Job launched.", "success");
             navigate("/jobs");
           },
-          onError,
+          onError: onLaunchError,
         },
       );
     }
@@ -175,7 +208,8 @@ export function JobBuilder() {
           showToast("Job closed.", "success");
           navigate("/jobs");
         },
-        onError: (err) => showToast(apiErrorMessage(err, "Couldn't close this job."), "error"),
+        onError: (err) =>
+          showToast(apiErrorMessage(err, "Couldn't close this job."), "error"),
       },
     );
   }
@@ -183,7 +217,9 @@ export function JobBuilder() {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-page font-semibold">{isEditing ? "Edit job" : "Create new job"}</h1>
+        <h1 className="text-page font-semibold">
+          {isEditing ? "Edit job" : "Create new job"}
+        </h1>
         <Link to="/jobs" className="text-body text-muted hover:text-ink">
           Cancel
         </Link>
@@ -211,8 +247,8 @@ export function JobBuilder() {
         <div className="flex flex-col gap-2">
           <span className="text-body font-medium text-ink">Template</span>
           <p className="text-body text-muted">
-            {templates.data?.items.find((t) => t.template_id === templateId)?.template_name ??
-              "—"}{" "}
+            {templates.data?.items.find((t) => t.template_id === templateId)
+              ?.template_name ?? "—"}{" "}
             <span className="text-helper">(can't be changed after launch)</span>
           </p>
         </div>
@@ -242,7 +278,10 @@ export function JobBuilder() {
         <div role="alert" className="flex flex-col gap-2 text-body text-error">
           <p>{formError}</p>
           {retryJobId && (
-            <Link to={`/jobs/${retryJobId}/edit`} className="text-primary hover:underline">
+            <Link
+              to={`/jobs/${retryJobId}/edit`}
+              className="text-primary hover:underline"
+            >
               Go to the job and retry
             </Link>
           )}
@@ -259,11 +298,23 @@ export function JobBuilder() {
           >
             Close job
           </button>
+        ) : canRetryLaunch ? (
+          <button
+            type="button"
+            onClick={handleRetryLaunch}
+            disabled={updateJob.isPending}
+            className="text-body text-primary hover:underline disabled:opacity-50"
+          >
+            {updateJob.isPending ? "Retrying…" : "Retry launch"}
+          </button>
         ) : (
           <span />
         )}
         <div className="flex gap-3">
-          <Link to="/jobs" className={buttonClassName({ variant: "secondary" })}>
+          <Link
+            to="/jobs"
+            className={buttonClassName({ variant: "secondary" })}
+          >
             Cancel
           </Link>
           <Button onClick={handleSubmit} isLoading={mutation.isPending}>
