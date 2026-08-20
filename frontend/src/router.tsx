@@ -7,6 +7,8 @@ import { Dashboard } from "./pages/Dashboard";
 import { AuthError } from "./pages/AuthError";
 import { Templates } from "./pages/Templates";
 import { TemplateBuilder } from "./pages/TemplateBuilder";
+import { Jobs } from "./pages/Jobs";
+import { JobBuilder } from "./pages/JobBuilder";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -30,6 +32,9 @@ export const router = createBrowserRouter([
       { path: "/templates", element: <Templates /> },
       { path: "/templates/new", element: <TemplateBuilder /> },
       { path: "/templates/:templateId/edit", element: <TemplateBuilder /> },
+      { path: "/jobs", element: <Jobs /> },
+      { path: "/jobs/new", element: <JobBuilder /> },
+      { path: "/jobs/:jobId/edit", element: <JobBuilder /> },
     ],
   },
   {

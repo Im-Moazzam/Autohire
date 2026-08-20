@@ -16,6 +16,41 @@
   template using an icon font.
 
 ### Added
+- US-06 (frontend): Jobs screens — listing (search + status filter, real
+  `submission_count`/`expires_at`-derived "days left") and a launch/edit
+  builder — against the real backend from US-06. Template picker binds to
+  real data from US-04's Templates screen. `AI process` on each job card
+  calls the real `POST /jobs/{id}/process` (US-15/16), disabled when the
+  job isn't `LIVE` or has zero applications — no per-row status polling in
+  the list, that felt like N+1 territory for a first pass.
+
+  Two deliberate departures from the Figma design, both because the
+  backend doesn't support what it shows: no "Save draft" button — `POST
+  /jobs` always attempts to go live immediately (`job_service.create_job`
+  calls `finalize_launch` unconditionally), there's no API path that
+  creates-and-leaves-DRAFT; and no delete/trash action on job cards —
+  `DELETE /jobs/{id}` doesn't exist, the real lifecycle action is closing
+  (`PATCH {"status": "CLOSED"}`), wired up as "Close job" on the edit
+  screen instead. Also skipped the Figma "Active/Expired" tab pair —
+  `JobStatus` has no `EXPIRED` value (`assert_job_accepting` derives
+  expiry from `expires_at` at request time, never stored as a status) — a
+  real `All/Draft/Live/Closed/Processed` filter replaces it, with expiry
+  shown per-card instead. Template name isn't shown on job cards either:
+  `JobOut` doesn't carry `template_id` or a name, only `JobDetailOut`
+  does, and resolving it per row would mean N+1 calls.
+
+  `StatusBadge` (`components/ui`) gained `Live`/`Closed`/`Processed` —
+  the job lifecycle isn't representable with its existing values (`Draft`
+  was there, the rest weren't). `http.ts`'s `api` client gained `.patch`,
+  needed for the first time here.
+
+  The "application deadline" field is a native date input, not Figma's
+  preset-days dropdown ("30 Days") — a preset can't round-trip an
+  existing job's exact `expires_at` when editing, an exact date can.
+
+  Verified end-to-end against the real backend in the browser: launch,
+  edit, status filtering, and the DRAFT->LIVE close transition, all
+  against a real Google-authenticated session.
 - US-04 (frontend): Templates screen — list, create, edit, delete — built
   against the real CRUD backend from US-04. Also lands the recruiter app
   shell (`Sidebar`, `Header`) that every future authenticated screen hangs
