@@ -23,4 +23,3 @@ e2e/playwright-report/
 credentials.json
 token.json
 *.pem
-resumes/
