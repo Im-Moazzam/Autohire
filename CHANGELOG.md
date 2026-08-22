@@ -3,6 +3,25 @@
 ## [Unreleased]
 
 ### Added
+- US-24: recruiter availability windows. `scheduling_preferences`
+  (`UNIQUE(recruiter_id)` — one row per recruiter, ever), real
+  `GET`/`PUT /scheduling/preferences` replacing the TS-02 stub. `PUT` upserts,
+  never 409; `available_days` normalized (case-folded, deduped, sorted
+  Monday-first) and rejected if empty or containing an unrecognized day;
+  `slot_duration_minutes` bounded 15–120 and must fit inside the
+  `[available_start_time, available_end_time)` window. `GET` before any `PUT`
+  returns synthesized Mon–Fri/09:00–17:00/30min defaults with
+  `preference_id: null` rather than 404 — nothing is persisted by a read.
+  Times are wall-clock, not UTC: interpreted in a new app-wide
+  `SCHEDULING_TIMEZONE` setting (default `Asia/Karachi`), copied onto each row
+  at insert time via a new `timezone` column and never rewritten by a later
+  update, so a saved row keeps its original meaning even if the setting
+  changes. Four CHECK constraints (`ck_scheduling_preferences_window`,
+  `_days_valid`, `_slot_duration`, plus the `UNIQUE`) mirror the Pydantic
+  validation as invariants-of-last-resort, unreachable through the validated
+  API. `scheduling_service.py` follows `template_service.py` conventions
+  (explicit `recruiter_id` scoping, rollback-and-500 on unexpected
+  `IntegrityError`).
 - US-18/US-19: semantic scoring and the ranked shortlist. `ai_analysis_results`
   (pgvector `embedding` column, dimension read from `EMBEDDING_DIM`, never a
   literal), `Embedder`/`VectorStore`/`ResumeAnalyzer` Protocols behind

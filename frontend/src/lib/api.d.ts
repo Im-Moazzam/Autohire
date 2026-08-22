@@ -993,11 +993,8 @@ export interface components {
         };
         /** SchedulingPreferencesOut */
         SchedulingPreferencesOut: {
-            /**
-             * Preference Id
-             * Format: uuid
-             */
-            preference_id: string;
+            /** Preference Id */
+            preference_id: string | null;
             /** Available Days */
             available_days: components["schemas"]["Weekday"][];
             /**
@@ -1012,6 +1009,8 @@ export interface components {
             available_end_time: string;
             /** Slot Duration Minutes */
             slot_duration_minutes: number;
+            /** Timezone */
+            timezone: string;
             /** Last Synced At */
             last_synced_at: string | null;
         };

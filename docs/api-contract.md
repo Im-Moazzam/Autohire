@@ -234,6 +234,22 @@ exposed on `RankedCandidateOut` (US-23 owns the explainability UI).
 Re-fetch free/busy immediately before allocation, and conflict-check at event-creation
 time. That is TR-05 and defect #4 in one line of policy.
 
+**`GET`/`PUT /scheduling/preferences` are real as of US-24.** `PUT` upserts — a
+recruiter has exactly one row, ever, enforced by `UNIQUE(recruiter_id)`; the first
+call creates it, every later call updates it, never a 409. `GET` before any `PUT`
+returns synthesized defaults (Mon–Fri, 09:00–17:00, 30 min) rather than 404, so the
+frontend always has a form to render; nothing is written on `GET`, so
+`SchedulingPreferencesOut.preference_id` is `null` until the recruiter actually
+saves — that's the "unsaved" signal for the frontend. `available_days` is
+case-normalized, deduped, and sorted Monday-first on `PUT`; empty, containing an
+unrecognized day, or a `slot_duration_minutes` that doesn't fit inside
+`[available_start_time, available_end_time)` are all 422 `VALIDATION_ERROR`, nothing
+persisted. `available_start_time`/`available_end_time` are wall-clock, not UTC —
+interpreted in `timezone`, which is copied onto the row from the app-wide
+`SCHEDULING_TIMEZONE` setting at creation and never rewritten by a later `PUT`; the
+API doesn't accept a `timezone` field, so it isn't per-recruiter yet.
+`recruiter_id` in the request body is rejected (`extra="forbid"`), never applied.
+
 ## Email
 | Method | Path | Notes |
 |---|---|---|

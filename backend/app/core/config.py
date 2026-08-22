@@ -44,5 +44,11 @@ class Settings(BaseSettings):
     # a host .venv), so this must be overridable rather than hardcoded.
     local_storage_root: str = "/storage"
 
+    # IANA name. Single app-wide zone, not per-recruiter (US-24) — every TIME
+    # column on scheduling_preferences is wall-clock in this zone. Written onto
+    # each row at insert time rather than read live, so changing this later
+    # doesn't silently reinterpret already-saved availability windows.
+    scheduling_timezone: str = "Asia/Karachi"
+
 
 settings = Settings()
