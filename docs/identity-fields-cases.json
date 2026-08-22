@@ -1,0 +1,15 @@
+{
+  "description": "Shared test vectors for resolve_identity_fields (backend/app/services/identity_fields.py) and hasIdentityFields (frontend/src/pages/TemplateBuilder.tsx). Both implementations must agree on every case here — see GitHub issue #23. Add a case whenever either implementation's matching rule changes.",
+  "cases": [
+    { "labels": ["Email", "Full Name"], "email": true, "name": true },
+    { "labels": ["Work Email", "First Name"], "email": true, "name": true },
+    { "labels": ["Your Email Address"], "email": true, "name": false },
+    { "labels": ["E-Mail"], "email": true, "name": false },
+    { "labels": ["Username"], "email": false, "name": true },
+    { "labels": [], "email": false, "name": false },
+    { "labels": ["Name your price"], "email": false, "name": true },
+    { "labels": ["Email", "Email"], "email": true, "name": false },
+    { "labels": ["Company Name", "Personal Email"], "email": true, "name": true },
+    { "labels": ["Phone", "Address"], "email": false, "name": false }
+  ]
+}

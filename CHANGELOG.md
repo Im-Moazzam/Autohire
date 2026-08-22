@@ -2,7 +2,58 @@
 
 ## [Unreleased]
 
+### Added
+- US-11/US-12 (frontend): built the candidate-facing application form
+  (`frontend/src/pages/Apply.tsx`) — was a placeholder stub, so a shared
+  job link had nowhere to go. Renders the template's fields by type, submits
+  a real multipart application (resume + answers) against the existing
+  backend, and covers all five UX states (loading, invalid/closed link,
+  form, inline validation errors, success). Added `forwardRef` to
+  `Textarea`, `Select`, and `FileInput` (matching the existing `Input`
+  pattern) so first-invalid-field focus works across all field types.
+  Required fields are marked with a trailing `*` (with a "* fields are
+  required" note) instead of labelling optional ones; the job description
+  clamps to 4 lines with a "Show more" toggle; the field the backend
+  resolves as the email identity field renders as a real `type="email"`
+  input with client-side format validation; and a rejected submission now
+  highlights the specific field(s) the backend complained about (mapping
+  `MISSING_REQUIRED_FIELD` / `UNKNOWN_FIELD` / oversized-response /
+  duplicate-email / invalid-email-or-name errors back onto the responsible
+  field and focusing it) instead of a generic "invalid submission data"
+  banner.
+- US-04 (frontend): a new template now starts with "Full Name" and "Email"
+  pre-filled as required `SHORT_TEXT` fields instead of one blank field —
+  every template needs both to pass identity-field validation, and
+  recruiters were hitting that 422 on their first save with no idea why.
+- US-06 (frontend): "Copy link" action on the job card (`Jobs.tsx`) and job
+  edit screen (`JobBuilder.tsx`) — `apply_url` was returned by the API but
+  never surfaced anywhere, so a launched job had no way to actually be
+  shared. Added `apply_url` to `JobOut` (previously only on
+  `JobDetailOut`) so the list view doesn't need a second fetch per job.
+- Shared golden-file contract test for identity-field matching
+  (`docs/identity-fields-cases.json`), checked by both
+  `backend/tests/test_identity_fields_contract.py` and
+  `frontend/src/lib/identityFields.test.ts` — closes GitHub issue #23.
+  The matching logic itself moved out of `TemplateBuilder.tsx` into a
+  shared `frontend/src/lib/identityFields.ts`, now also used by `Apply.tsx`
+  to detect the email field and to map backend validation errors back to
+  the right field — one canonical frontend implementation instead of two.
+
+### Changed
+- Removed two of the three redundant "Post new job" entry points (sidebar
+  button shown on every page, and the Jobs page's empty-state action) —
+  the page-header button is now the only one.
+
 ### Fixed
+- `frontend/vite.config.ts`: enabled polling-based file watching
+  (`server.watch.usePolling`). Docker Desktop on Windows doesn't propagate
+  inotify events through a bind mount, so the dev server's default watcher
+  was silently missing host-side file edits — the file changed on disk but
+  HMR never fired, requiring a manual container restart to see anything.
+- `backend/app/core/db.py`: added `pool_pre_ping=True` to the SQLAlchemy
+  engine — hardening against stale pooled connections in long-lived local
+  dev sessions, suspected cause of the intermittent 401 in GitHub issue #24
+  (not reproduced after 9 consecutive full-suite runs on fresh containers).
 - US-15/16: `resume_parser.extract_text` glued icon-font glyphs directly onto
   adjacent words (e.g. a phone number rendered as an unrenderable codepoint
   immediately followed by the digits, no whitespace) — found on a real resume

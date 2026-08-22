@@ -34,6 +34,7 @@ def _to_job_out(job: JobPosting, submission_count: int) -> JobOut:
         expires_at=job.expires_at,
         submission_count=submission_count,
         created_at=job.created_at,
+        apply_url=_apply_url(job.apply_slug),
     )
 
 

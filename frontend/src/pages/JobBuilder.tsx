@@ -102,6 +102,17 @@ export function JobBuilder() {
   const mutation = isEditing ? updateJob : createJob;
   const canClose = isEditing && existing.data?.status === "LIVE";
   const canRetryLaunch = isEditing && existing.data?.status === "DRAFT";
+  const canShare = isEditing && existing.data?.status !== "DRAFT";
+
+  async function handleCopyLink() {
+    if (!existing.data) return;
+    try {
+      await navigator.clipboard.writeText(existing.data.apply_url);
+      showToast("Application link copied.", "success");
+    } catch {
+      showToast(existing.data.apply_url, "error");
+    }
+  }
 
   function validateTitle(): boolean {
     if (!jobTitle.trim()) {
@@ -224,6 +235,21 @@ export function JobBuilder() {
           Cancel
         </Link>
       </div>
+
+      {canShare && (
+        <div className="flex items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
+          <span className="truncate text-body text-muted">
+            {existing.data?.apply_url}
+          </span>
+          <button
+            type="button"
+            onClick={handleCopyLink}
+            className="shrink-0 text-body text-primary hover:underline"
+          >
+            Copy link
+          </button>
+        </div>
+      )}
 
       <Input
         ref={titleInputRef}
