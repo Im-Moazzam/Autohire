@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Button, Card, Input, Select, Textarea, type SelectOption } from "../components/ui";
+import {
+  Button,
+  Card,
+  Input,
+  Select,
+  Textarea,
+  type SelectOption,
+} from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
+import { hasIdentityFields } from "../lib/identityFields";
 import {
   FIELD_TYPES_WITH_OPTIONS,
   FIELD_TYPE_LABELS,
@@ -25,9 +33,9 @@ interface DraftField {
   optionsText: string;
 }
 
-const FIELD_TYPE_OPTIONS: SelectOption[] = Object.entries(FIELD_TYPE_LABELS).map(
-  ([value, label]) => ({ value, label }),
-);
+const FIELD_TYPE_OPTIONS: SelectOption[] = Object.entries(
+  FIELD_TYPE_LABELS,
+).map(([value, label]) => ({ value, label }));
 
 function newField(): DraftField {
   return {
@@ -39,15 +47,29 @@ function newField(): DraftField {
   };
 }
 
-function hasIdentityFields(fields: DraftField[]): { email: boolean; name: boolean } {
-  let email = false;
-  let name = false;
-  for (const field of fields) {
-    const norm = field.field_label.toLowerCase().replace(/[^a-z0-9]/g, "");
-    if (!email && norm.includes("email")) email = true;
-    if (!name && !norm.includes("email") && norm.includes("name")) name = true;
-  }
-  return { email, name };
+/** Every template needs a field resolving to email and one to full name
+ * (see hasIdentityFields below) or the backend rejects it at save time —
+ * pre-seeding them means a recruiter starting a new template never hits
+ * that 422 for a mistake they didn't know they were making. Still plain,
+ * editable fields, not locked; removing or relabeling them out of matching
+ * just brings the same validation error back. */
+function defaultFields(): DraftField[] {
+  return [
+    {
+      key: crypto.randomUUID(),
+      field_label: "Full Name",
+      field_type: "SHORT_TEXT",
+      is_required: true,
+      optionsText: "",
+    },
+    {
+      key: crypto.randomUUID(),
+      field_label: "Email",
+      field_type: "SHORT_TEXT",
+      is_required: true,
+      optionsText: "",
+    },
+  ];
 }
 
 export function TemplateBuilder() {
@@ -61,7 +83,7 @@ export function TemplateBuilder() {
   const replaceTemplate = useReplaceTemplate(templateId ?? "");
 
   const [templateName, setTemplateName] = useState("");
-  const [fields, setFields] = useState<DraftField[]>([newField()]);
+  const [fields, setFields] = useState<DraftField[]>(defaultFields());
   const [nameError, setNameError] = useState<string>();
   const [formError, setFormError] = useState<string>();
 
@@ -102,19 +124,29 @@ export function TemplateBuilder() {
   if (isEditing && existing.isError) {
     return (
       <div className="max-w-2xl">
-        <Card errorText={apiErrorMessage(existing.error, "Couldn't load this template.")} />
-        <Link to="/templates" className="mt-4 inline-block text-body text-primary hover:underline">
+        <Card
+          errorText={apiErrorMessage(
+            existing.error,
+            "Couldn't load this template.",
+          )}
+        />
+        <Link
+          to="/templates"
+          className="mt-4 inline-block text-body text-primary hover:underline"
+        >
           Back to templates
         </Link>
       </div>
     );
   }
 
-  const identity = hasIdentityFields(fields);
+  const identity = hasIdentityFields(fields.map((f) => f.field_label));
   const mutation = isEditing ? replaceTemplate : createTemplate;
 
   function updateField(key: string, patch: Partial<DraftField>) {
-    setFields((prev) => prev.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+    setFields((prev) =>
+      prev.map((f) => (f.key === key ? { ...f, ...patch } : f)),
+    );
   }
 
   function removeField(key: string) {
@@ -163,7 +195,10 @@ export function TemplateBuilder() {
         fieldLabelRefs.current.get(field.key)?.focus();
         return;
       }
-      if (FIELD_TYPES_WITH_OPTIONS.includes(field.field_type) && !field.optionsText.trim()) {
+      if (
+        FIELD_TYPES_WITH_OPTIONS.includes(field.field_type) &&
+        !field.optionsText.trim()
+      ) {
         setFormError(`"${field.field_label}" needs at least one option.`);
         fieldLabelRefs.current.get(field.key)?.focus();
         return;
@@ -171,7 +206,7 @@ export function TemplateBuilder() {
     }
     if (!identity.email || !identity.name) {
       setFormError(
-        "Include a field labeled with \"email\" and one with \"name\" (e.g. \"Full Name\", \"Email Address\") — candidates can't be matched to submissions without both.",
+        'Include a field labeled with "email" and one with "name" (e.g. "Full Name", "Email Address") — candidates can\'t be matched to submissions without both.',
       );
       return;
     }
@@ -185,14 +220,20 @@ export function TemplateBuilder() {
         is_required: field.is_required,
         field_order: index,
         options: FIELD_TYPES_WITH_OPTIONS.includes(field.field_type)
-          ? field.optionsText.split("\n").map((o) => o.trim()).filter(Boolean)
+          ? field.optionsText
+              .split("\n")
+              .map((o) => o.trim())
+              .filter(Boolean)
           : null,
       })),
     };
 
     mutation.mutate(payload, {
       onSuccess: () => {
-        showToast(isEditing ? "Template saved." : "Template created.", "success");
+        showToast(
+          isEditing ? "Template saved." : "Template created.",
+          "success",
+        );
         navigate("/templates");
       },
       onError: (err) => {
@@ -242,7 +283,10 @@ export function TemplateBuilder() {
           </div>
         ) : (
           fields.map((field, index) => (
-            <div key={field.key} className="rounded-card border border-border bg-surface p-4">
+            <div
+              key={field.key}
+              className="rounded-card border border-border bg-surface p-4"
+            >
               <div className="flex items-start gap-3">
                 <div className="flex flex-1 flex-col gap-3">
                   <Input
@@ -252,7 +296,9 @@ export function TemplateBuilder() {
                     }}
                     label="Field label"
                     value={field.field_label}
-                    onChange={(e) => updateField(field.key, { field_label: e.target.value })}
+                    onChange={(e) =>
+                      updateField(field.key, { field_label: e.target.value })
+                    }
                     placeholder="e.g. Full Name"
                   />
                   <Select
@@ -260,7 +306,9 @@ export function TemplateBuilder() {
                     options={FIELD_TYPE_OPTIONS}
                     value={field.field_type}
                     onChange={(e) =>
-                      updateField(field.key, { field_type: e.target.value as FieldType })
+                      updateField(field.key, {
+                        field_type: e.target.value as FieldType,
+                      })
                     }
                   />
                   {FIELD_TYPES_WITH_OPTIONS.includes(field.field_type) && (
@@ -268,14 +316,20 @@ export function TemplateBuilder() {
                       label="Options"
                       helperText="One option per line."
                       value={field.optionsText}
-                      onChange={(e) => updateField(field.key, { optionsText: e.target.value })}
+                      onChange={(e) =>
+                        updateField(field.key, { optionsText: e.target.value })
+                      }
                     />
                   )}
                   <label className="flex items-center gap-2 text-body">
                     <input
                       type="checkbox"
                       checked={field.is_required}
-                      onChange={(e) => updateField(field.key, { is_required: e.target.checked })}
+                      onChange={(e) =>
+                        updateField(field.key, {
+                          is_required: e.target.checked,
+                        })
+                      }
                     />
                     Required
                   </label>
@@ -331,7 +385,10 @@ export function TemplateBuilder() {
       )}
 
       <div className="flex justify-end gap-3">
-        <Link to="/templates" className={buttonClassName({ variant: "secondary" })}>
+        <Link
+          to="/templates"
+          className={buttonClassName({ variant: "secondary" })}
+        >
           Cancel
         </Link>
         <Button onClick={handleSubmit} isLoading={mutation.isPending}>
