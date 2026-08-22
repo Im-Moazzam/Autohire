@@ -219,6 +219,18 @@ def test_list_jobs_only_returns_callers_jobs(
     assert response.json()["total"] == 0
 
 
+def test_list_jobs_includes_apply_url(authed_client: TestClient) -> None:
+    """The list view is where the recruiter actually shares the link from
+    (Jobs.tsx job card) — apply_url must be on JobOut, not just JobDetailOut."""
+    template = _create_template(authed_client)
+    created = _create_job(authed_client, template["template_id"])
+
+    response = authed_client.get("/api/v1/jobs")
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["apply_url"] == created["apply_url"]
+
+
 # Real /process and /process/status coverage lives in test_process.py
 # (US-15/16) — these routes are no longer fixture-backed stubs.
 

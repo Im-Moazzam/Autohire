@@ -1,14 +1,23 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { EmptyState, Input, Select, StatusBadge } from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorMessage } from "../lib/http";
-import { JOB_STATUS_LABELS, useJobs, useTriggerProcess, type Job, type JobStatus } from "../lib/jobs";
+import {
+  JOB_STATUS_LABELS,
+  useJobs,
+  useTriggerProcess,
+  type Job,
+  type JobStatus,
+} from "../lib/jobs";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
-  ...Object.entries(JOB_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+  ...Object.entries(JOB_STATUS_LABELS).map(([value, label]) => ({
+    value,
+    label,
+  })),
 ];
 
 function formatDate(iso: string): string {
@@ -32,12 +41,23 @@ function JobCard({ job }: { job: Job }) {
   const triggerProcess = useTriggerProcess();
 
   const canProcess = job.status === "LIVE" && job.submission_count > 0;
+  const canShare = job.status !== "DRAFT";
 
   function handleProcess() {
     triggerProcess.mutate(job.job_id, {
       onSuccess: () => showToast("Resume processing started.", "success"),
-      onError: (err) => showToast(apiErrorMessage(err, "Couldn't start processing."), "error"),
+      onError: (err) =>
+        showToast(apiErrorMessage(err, "Couldn't start processing."), "error"),
     });
+  }
+
+  async function handleCopyLink() {
+    try {
+      await navigator.clipboard.writeText(job.apply_url);
+      showToast("Application link copied.", "success");
+    } catch {
+      showToast(job.apply_url, "error");
+    }
   }
 
   return (
@@ -50,14 +70,27 @@ function JobCard({ job }: { job: Job }) {
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-table text-muted">
             <span>
-              {job.submission_count} application{job.submission_count === 1 ? "" : "s"}
+              {job.submission_count} application
+              {job.submission_count === 1 ? "" : "s"}
             </span>
             <span>{daysLeftLabel(job.expires_at)}</span>
             <span>Created {formatDate(job.created_at)}</span>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-4">
-          <Link to={`/jobs/${job.job_id}/edit`} className="text-body text-primary hover:underline">
+          {canShare && (
+            <button
+              type="button"
+              onClick={handleCopyLink}
+              className="text-body text-primary hover:underline"
+            >
+              Copy link
+            </button>
+          )}
+          <Link
+            to={`/jobs/${job.job_id}/edit`}
+            className="text-body text-primary hover:underline"
+          >
             View / Edit
           </Link>
           <button
@@ -71,7 +104,9 @@ function JobCard({ job }: { job: Job }) {
                   : "No applications to process yet"
                 : undefined
             }
-            className={buttonClassName({ className: "px-4 py-2 text-table disabled:opacity-40" })}
+            className={buttonClassName({
+              className: "px-4 py-2 text-table disabled:opacity-40",
+            })}
           >
             {triggerProcess.isPending ? "Starting…" : "AI process"}
           </button>
@@ -82,7 +117,6 @@ function JobCard({ job }: { job: Job }) {
 }
 
 export function Jobs() {
-  const navigate = useNavigate();
   const [status, setStatus] = useState<JobStatus | "">("");
   const [q, setQ] = useState("");
   const { data, isLoading, isError, error, refetch } = useJobs({
@@ -97,7 +131,9 @@ export function Jobs() {
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-page font-semibold">Job listings</h1>
-          <p className="text-body text-muted">Manage and monitor your recruitment drives.</p>
+          <p className="text-body text-muted">
+            Manage and monitor your recruitment drives.
+          </p>
         </div>
         <Link to="/jobs/new" className={buttonClassName()}>
           + Post new job
@@ -124,7 +160,10 @@ export function Jobs() {
       {isLoading ? (
         <div className="flex flex-col gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-card border border-border bg-border/20" />
+            <div
+              key={i}
+              className="h-24 animate-pulse rounded-card border border-border bg-border/20"
+            />
           ))}
         </div>
       ) : isError ? (
@@ -138,9 +177,7 @@ export function Jobs() {
       ) : jobs.length === 0 ? (
         <EmptyState
           title="No jobs yet"
-          description="Launch your first job to start collecting applications."
-          actionLabel="+ Post new job"
-          onAction={() => navigate("/jobs/new")}
+          description="Use “+ Post new job” above to start collecting applications."
         />
       ) : (
         <div className="flex flex-col gap-4">

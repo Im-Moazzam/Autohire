@@ -16,6 +16,7 @@ class JobOut(BaseModel):
     expires_at: datetime
     submission_count: int
     created_at: datetime
+    apply_url: str
 
 
 class JobDetailOut(BaseModel):

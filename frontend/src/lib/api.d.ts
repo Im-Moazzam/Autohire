@@ -767,6 +767,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Apply Url */
+            apply_url: string;
         };
         /**
          * JobStatus
