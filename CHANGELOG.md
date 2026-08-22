@@ -3,6 +3,22 @@
 ## [Unreleased]
 
 ### Added
+- US-18/US-19: semantic scoring and the ranked shortlist. `ai_analysis_results`
+  (pgvector `embedding` column, dimension read from `EMBEDDING_DIM`, never a
+  literal), `Embedder`/`VectorStore`/`ResumeAnalyzer` Protocols behind
+  `app/adapters/` (`FastEmbedEmbedder` — `all-MiniLM-L6-v2` via ONNX/fastembed
+  instead of sentence-transformers, same model and 384 dims without pulling
+  PyTorch; `PgVectorStore`'s cosine similarity is the whole of
+  `semantic_score`, no LLM-produced number ever reaches it; `LocalAnalyzer` is
+  deterministic and offline per ADR-003). A `BATCH_RANKING` background task
+  mirrors `RESUME_PARSE`'s shape exactly, triggered by a new
+  `POST /jobs/{id}/rank` (202 `TaskOut`, same pattern as `/process`). Only
+  `PARSED`/`RANKED` candidates are scored — `PARSE_ERROR` and `SUBMITTED` are
+  skipped, never ranked zero. `GET /jobs/{id}/candidates/ranked` is wired to
+  real data, closing the last `fixtures.CANDIDATES` read path with a real
+  counterpart. `jd_embedding_id` is populated as a
+  `{model}:{dim}:{sha256(jd)[:16]}` provenance ref, closing drift row 28.
+  `JobDetailOut.processed_at` is null until a job's first successful rank.
 - US-11/US-12 (frontend): built the candidate-facing application form
   (`frontend/src/pages/Apply.tsx`) — was a placeholder stub, so a shared
   job link had nowhere to go. Renders the template's fields by type, submits

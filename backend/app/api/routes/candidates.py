@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_db, get_owned_candidate, get_owned_job
+from app.models.ai_analysis_result import AiAnalysisResult
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.schemas.candidate import (
@@ -12,9 +12,9 @@ from app.schemas.candidate import (
     CandidateUpdate,
     RankedCandidateOut,
 )
-from app.schemas.common import Page, PaginationParams, error_responses, paginate, pagination_params
+from app.schemas.common import Page, PaginationParams, error_responses, pagination_params
 from app.schemas.enums import SubmissionStatus
-from app.services import candidate_service
+from app.services import candidate_service, ranking_service
 
 job_candidates_router = APIRouter(
     prefix="/jobs",
@@ -52,8 +52,16 @@ def _to_candidate_out(candidate: Candidate) -> CandidateOut:
     )
 
 
-def _to_ranked_out(candidate: dict) -> RankedCandidateOut:
-    return RankedCandidateOut(**candidate, resume_url=fixtures.resume_url_for(candidate))
+def _to_ranked_out(candidate: Candidate, analysis: AiAnalysisResult) -> RankedCandidateOut:
+    base = _to_candidate_out(candidate)
+    return RankedCandidateOut(
+        **base.model_dump(),
+        rank_position=analysis.rank_position,
+        semantic_score=analysis.semantic_score,
+        matched_skills=analysis.matched_skills or [],
+        missing_skills=analysis.missing_skills or [],
+        ai_feedback_summary=analysis.ai_feedback_summary,
+    )
 
 
 def _to_detail_out(db: Session, candidate: Candidate) -> CandidateDetailOut:
@@ -97,17 +105,15 @@ def list_ranked_candidates(
     skill: str | None = Query(default=None),
     job: JobPosting = Depends(get_owned_job),
     params: PaginationParams = Depends(pagination_params),
+    db: Session = Depends(get_db),
 ) -> Page[RankedCandidateOut]:
-    # STUB: US-19
-    candidates = [
-        c for c in fixtures.candidates_for_job(job.job_id) if c["rank_position"] is not None
-    ]
-    if min_score is not None:
-        candidates = [c for c in candidates if (c["semantic_score"] or 0) >= min_score]
-    if skill:
-        candidates = [c for c in candidates if skill in c["matched_skills"]]
-    candidates.sort(key=lambda c: c["rank_position"])
-    return paginate([_to_ranked_out(c) for c in candidates], params)
+    rows, total = ranking_service.list_ranked_candidates(db, job.job_id, params, min_score, skill)
+    return Page[RankedCandidateOut](
+        items=[_to_ranked_out(candidate, analysis) for candidate, analysis in rows],
+        total=total,
+        page=params.page,
+        size=params.size,
+    )
 
 
 @candidates_router.get(
