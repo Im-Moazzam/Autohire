@@ -24,3 +24,27 @@ class ResumeStore(Protocol):
     ) -> StoredFile: ...
 
     def fetch_resume(self, recruiter: Recruiter, candidate: "Candidate") -> bytes: ...
+
+
+@dataclass(frozen=True)
+class ResumeAnalysis:
+    """What the LLM adapter produces. Deliberately has no score field — the
+    score is cosine similarity, computed by VectorStore, and nothing here can
+    become semantic_score (US-18's headline rule)."""
+
+    matched_skills: list[str]
+    missing_skills: list[str]
+    feedback: str | None
+    evidence_snippets: list[str] | None
+
+
+class Embedder(Protocol):
+    def embed(self, texts: list[str]) -> list[list[float]]: ...
+
+
+class VectorStore(Protocol):
+    def cosine_similarity(self, vector_a: list[float], vector_b: list[float]) -> float: ...
+
+
+class ResumeAnalyzer(Protocol):
+    def analyze(self, jd_text: str, resume_text: str) -> ResumeAnalysis: ...

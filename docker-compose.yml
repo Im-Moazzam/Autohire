@@ -32,7 +32,7 @@ services:
     env_file: .env
     # docs-uml and docs-tests (Makefile) write to /app/../docs/generated, i.e.
     # /docs/generated inside this container — mount ./docs so it lands on the host.
-    volumes: ["./backend:/app", "./storage:/storage", "./docs:/docs"]
+    volumes: ["./backend:/app", "./storage:/storage", "./docs:/docs", "model_cache:/models"]
     ports: ["8000:8000"]
     depends_on:
       db: { condition: service_healthy }
@@ -44,7 +44,7 @@ services:
     build: ./backend
     command: celery -A app.worker.celery_app worker --loglevel=info
     env_file: .env
-    volumes: ["./backend:/app", "./storage:/storage"]
+    volumes: ["./backend:/app", "./storage:/storage", "model_cache:/models"]
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -58,3 +58,6 @@ services:
 
 volumes:
   pgdata:
+  # US-18: the ~90MB all-MiniLM-L6-v2 ONNX model downloads on first embed()
+  # call. Named volume so a container restart doesn't pay for it again.
+  model_cache:

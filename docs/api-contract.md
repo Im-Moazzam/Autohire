@@ -55,7 +55,8 @@ these. Summary:
 Key error codes: `REAUTH_REQUIRED` (409), `JOB_CLOSED` (410), `DUPLICATE_SUBMISSION` (409),
 `UNSUPPORTED_FILE_TYPE` (415), `FILE_TOO_LARGE` (413), `QUOTA_EXCEEDED` (503),
 `TENANT_FORBIDDEN` (403), `INVALID_STATE_TRANSITION` (409), `TEMPLATE_IN_USE` (409),
-`DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9).
+`DUPLICATE_TEMPLATE_NAME` (409), `NOT_AUTHENTICATED` (401), `VALIDATION_ERROR` (422, ADR-004 P9),
+`NO_PARSED_CANDIDATES` (409, US-18 — `POST /jobs/{id}/rank` has no scoreable candidate).
 `JOB_CLOSED` (US-11) replaces the earlier `JOB_EXPIRED`/`JOB_NOT_ACCEPTING` split — one
 code, `details: {job_title, reason}` where `reason` is `CLOSED | EXPIRED | PAUSED`, so
 the frontend still knows which of the three gating conditions failed without three codes.
@@ -115,6 +116,7 @@ can't answer them would only fail later, as a candidate-facing 500 at submission
 | DELETE | `/jobs/{id}` | Phase 2 (US-09/US-10) — out of scope; US-06 explicitly excludes edit/TTL-extend/delete from Phase 1 |
 | POST | `/jobs/{id}/process` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED and candidates exist |
 | GET | `/jobs/{id}/process/status` | `ProcessStatusOut` — `total`/`processed`/`failed` computed from `candidates.submission_status`, not task state |
+| POST | `/jobs/{id}/rank` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED/PROCESSED and a `PARSED`/`RANKED` candidate exists (US-18) |
 
 **`POST /jobs/{id}/process` 409s, US-15/16.** Three distinct codes, checked in this
 order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE` task for this job is already
@@ -122,6 +124,15 @@ order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE` task for this job is already
 `INVALID_STATE_TRANSITION` (job isn't `CLOSED`), `NO_CANDIDATES` (job has zero live
 candidates). The `background_tasks` row is written before the Celery task is
 dispatched, so a trace exists even if the broker never picks it up.
+
+**`POST /jobs/{id}/rank` 409s, US-18.** Same shape and same three-code order as
+`/process`: `PROCESSING_IN_PROGRESS` (the concurrency guard covers both
+`RESUME_PARSE` and `BATCH_RANKING` — one active task per job, of either type),
+`INVALID_STATE_TRANSITION` (job isn't `CLOSED` or `PROCESSED`), `NO_PARSED_CANDIDATES`
+(no `PARSED`/`RANKED` candidate to score). A separate endpoint from `/process` rather
+than auto-chaining after a parse, so a recruiter can re-rank without re-parsing, and
+so a rerun replaces prior `ai_analysis_results` rows instead of accumulating
+duplicates (`UNIQUE` on `candidate_id`, upserted).
 
 **No close action endpoint.** Closing a job is `PATCH /jobs/{id}` with
 `{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a
@@ -200,6 +211,15 @@ response. They're retrieved from `GET /jobs/{id}/candidates?submission_status=PA
 — one collection, filtered, per P2/P5. Aggregate counts (total, parsed, ranked,
 parse-error) live on `GET /jobs/{id}` detail and on process task status, not on the
 ranked endpoint.
+
+`GET /jobs/{id}/candidates/ranked` is real as of US-18 — `Page[RankedCandidateOut]`
+sorted by `rank_position`, backed by `ai_analysis_results`. A job never ranked
+returns `{items: [], total: 0, ...}`, not a 404; `JobDetailOut.processed_at` is
+`null` in that case (`max(ai_analysis_results.processed_at)` for the job, or `null`
+if none exist). `matched_skills`/`missing_skills` are `[]`, never `null`, when the
+LLM analyzer step failed for that candidate — the score and rank are unaffected.
+`evidence_snippets` is written to the column by the ranking task but is **not**
+exposed on `RankedCandidateOut` (US-23 owns the explainability UI).
 
 ## Scheduling
 | Method | Path | Notes |

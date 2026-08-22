@@ -36,6 +36,9 @@ class JobDetailOut(BaseModel):
     google_drive_folder_id: str | None
     updated_at: datetime
     submission_counts: dict[SubmissionStatus, int]
+    # Null until BATCH_RANKING has completed once (US-18) — a job that was
+    # never ranked is a 200 with an empty shortlist, not a 404.
+    processed_at: datetime | None
 
 
 class JobCreate(BaseModel):

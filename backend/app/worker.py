@@ -9,5 +9,5 @@ celery_app.conf.update(
     task_soft_time_limit=300,
     task_time_limit=330,
     task_default_retry_delay=10,
-    include=["app.tasks.resume_parse"],
+    include=["app.tasks.resume_parse", "app.tasks.batch_ranking"],
 )
