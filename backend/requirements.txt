@@ -10,6 +10,8 @@ celery
 redis
 pypdf
 python-docx
+pgvector
+fastembed
 python-multipart
 httpx
 cryptography

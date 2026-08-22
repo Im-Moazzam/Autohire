@@ -11,7 +11,7 @@ from app.schemas.common import Page, PaginationParams, error_responses, paginati
 from app.schemas.enums import JobStatus, SubmissionStatus
 from app.schemas.job import JobCreate, JobDetailOut, JobOut, JobUpdate
 from app.schemas.task import ProcessStatusOut, TaskOut
-from app.services import job_service, task_service
+from app.services import job_service, ranking_service, task_service
 
 router = APIRouter(
     prefix="/jobs",
@@ -39,7 +39,7 @@ def _to_job_out(job: JobPosting, submission_count: int) -> JobOut:
 
 
 def _to_job_detail_out(
-    job: JobPosting, submission_counts: dict[SubmissionStatus, int]
+    db: Session, job: JobPosting, submission_counts: dict[SubmissionStatus, int]
 ) -> JobDetailOut:
     return JobDetailOut(
         job_id=job.job_id,
@@ -56,6 +56,7 @@ def _to_job_detail_out(
         google_drive_folder_id=job.google_drive_folder_id,
         updated_at=job.updated_at,
         submission_counts=submission_counts,
+        processed_at=ranking_service.processed_at_for_job(db, job.job_id),
     )
 
 
@@ -90,14 +91,14 @@ def create_job(
     store: ResumeStore = Depends(get_resume_store),
 ) -> JobDetailOut:
     job = job_service.create_job(db, recruiter, payload, store)
-    return _to_job_detail_out(job, job_service.submission_counts_by_status(db, job.job_id))
+    return _to_job_detail_out(db, job, job_service.submission_counts_by_status(db, job.job_id))
 
 
 @router.get("/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404))
 def get_job(
     job: JobPosting = Depends(get_owned_job), db: Session = Depends(get_db)
 ) -> JobDetailOut:
-    return _to_job_detail_out(job, job_service.submission_counts_by_status(db, job.job_id))
+    return _to_job_detail_out(db, job, job_service.submission_counts_by_status(db, job.job_id))
 
 
 @router.patch(
@@ -113,7 +114,9 @@ def update_job(
     # Closing a job is PATCH {"status": "CLOSED"}, no /close endpoint (ADR-004 P3).
     # Retrying a failed launch is PATCH {"status": "LIVE"} on a DRAFT job.
     updated = job_service.update_job(db, recruiter, job, payload, store)
-    return _to_job_detail_out(updated, job_service.submission_counts_by_status(db, updated.job_id))
+    return _to_job_detail_out(
+        db, updated, job_service.submission_counts_by_status(db, updated.job_id)
+    )
 
 
 @router.post(
@@ -140,3 +143,18 @@ def process_status(
     job: JobPosting = Depends(get_owned_job), db: Session = Depends(get_db)
 ) -> ProcessStatusOut:
     return ProcessStatusOut(**task_service.process_status_for_job(db, job.job_id))
+
+
+@router.post(
+    "/{job_id}/rank",
+    response_model=TaskOut,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses=error_responses(401, 404, 409),
+)
+def trigger_rank(
+    job: JobPosting = Depends(get_owned_job),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> TaskOut:
+    task = task_service.enqueue_batch_ranking(db, recruiter, job)
+    return TaskOut.model_validate(task)

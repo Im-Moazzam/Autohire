@@ -10,6 +10,7 @@ from app.models.candidate import Candidate
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.schemas.enums import JobStatus, SubmissionStatus, TaskStatus, TaskType
+from app.tasks.batch_ranking import batch_ranking_job
 from app.tasks.resume_parse import resume_parse_job
 
 _PROCESSING_IN_PROGRESS = {
@@ -24,6 +25,14 @@ _INVALID_STATE = {
     "code": "INVALID_STATE_TRANSITION",
     "message": "Job must be CLOSED with candidates to process.",
 }
+_NO_PARSED_CANDIDATES = {
+    "code": "NO_PARSED_CANDIDATES",
+    "message": "This job has no PARSED candidates to rank.",
+}
+_RANK_INVALID_STATE = {
+    "code": "INVALID_STATE_TRANSITION",
+    "message": "Job must be CLOSED or PROCESSED to rank.",
+}
 
 # Statuses "processed" past a successful parse — used by process_status_for_job.
 _PROCESSED_STATUSES = {
@@ -37,11 +46,17 @@ _PROCESSED_STATUSES = {
 }
 
 
+_ACTIVE_TASK_TYPES = (TaskType.RESUME_PARSE, TaskType.BATCH_RANKING)
+
+
 def active_task_for_job(db: Session, job_id: uuid.UUID) -> BackgroundTask | None:
+    """Any PENDING/RUNNING RESUME_PARSE or BATCH_RANKING task for this job —
+    mirrors uq_background_tasks_job_active's widened predicate (US-18), so a
+    rank can't start mid-parse and vice versa."""
     return db.scalar(
         select(BackgroundTask).where(
             BackgroundTask.job_id == job_id,
-            BackgroundTask.task_type == TaskType.RESUME_PARSE,
+            BackgroundTask.task_type.in_(_ACTIVE_TASK_TYPES),
             BackgroundTask.status.in_([TaskStatus.PENDING, TaskStatus.RUNNING]),
         )
     )
@@ -87,6 +102,57 @@ def enqueue_resume_parse(db: Session, recruiter: Recruiter, job: JobPosting) -> 
     db.refresh(task)
 
     async_result = resume_parse_job.delay(str(task.task_id))
+    task.celery_task_id = async_result.id
+    db.commit()
+    db.refresh(task)
+    return task
+
+
+_RANKABLE_STATUSES = (SubmissionStatus.PARSED, SubmissionStatus.RANKED)
+
+
+def enqueue_batch_ranking(db: Session, recruiter: Recruiter, job: JobPosting) -> BackgroundTask:
+    """Mirrors enqueue_resume_parse exactly (ADR-004 P4, same shape as
+    POST /process): pre-check, commit PENDING row, .delay(), IntegrityError
+    backstop. A separate route rather than chaining off resume_parse_job so a
+    recruiter can re-rank without re-parsing, and so TC-06/TC-08's 409s have
+    somewhere to be returned from."""
+    if active_task_for_job(db, job.job_id) is not None:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_PROCESSING_IN_PROGRESS)
+
+    if job.status not in (JobStatus.CLOSED, JobStatus.PROCESSED):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_RANK_INVALID_STATE)
+
+    has_rankable = (
+        db.scalar(
+            select(Candidate.candidate_id).where(
+                Candidate.job_id == job.job_id,
+                Candidate.deleted_at.is_(None),
+                Candidate.submission_status.in_(_RANKABLE_STATUSES),
+            )
+        )
+        is not None
+    )
+    if not has_rankable:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_NO_PARSED_CANDIDATES)
+
+    task = BackgroundTask(
+        recruiter_id=recruiter.recruiter_id,
+        job_id=job.job_id,
+        task_type=TaskType.BATCH_RANKING,
+        status=TaskStatus.PENDING,
+    )
+    db.add(task)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=_PROCESSING_IN_PROGRESS
+        ) from None
+    db.refresh(task)
+
+    async_result = batch_ranking_job.delay(str(task.task_id))
     task.celery_task_id = async_result.id
     db.commit()
     db.refresh(task)

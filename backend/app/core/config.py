@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
+    # Passed explicitly to fastembed's TextEmbedding(cache_dir=...) rather than
+    # relying on its own env-var name (which has changed across versions) —
+    # a wrong env var gives a silent per-container re-download, not an error.
+    embedding_cache_dir: str = "/models"
 
     openai_api_key: str = ""
     pinecone_api_key: str = ""
