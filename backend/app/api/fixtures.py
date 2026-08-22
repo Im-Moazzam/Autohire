@@ -4,7 +4,7 @@ up the real query. Nothing here is ever an empty list — see docs/checklists/ux
 every list/detail/failure state must be reachable through a real request."""
 
 import uuid
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.schemas.enums import (
     DeliveryStatus,
@@ -15,7 +15,6 @@ from app.schemas.enums import (
     SubmissionStatus,
     TaskStatus,
     TaskType,
-    Weekday,
 )
 
 
@@ -403,17 +402,8 @@ PROCESS_STATUS_BY_JOB: dict[uuid.UUID, dict] = {
 }
 
 # --- Scheduling ----------------------------------------------------------
-
-PREFERENCE_ID = _id("scheduling-preferences")
-
-SCHEDULING_PREFERENCES: dict = {
-    "preference_id": PREFERENCE_ID,
-    "available_days": [Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY],
-    "available_start_time": time(9, 0),
-    "available_end_time": time(17, 0),
-    "slot_duration_minutes": 30,
-    "last_synced_at": NOW - timedelta(hours=4),
-}
+# preferences are real as of US-24 (scheduling_service); the fixtures below
+# still back the /available-slots stub (US-26).
 
 AVAILABLE_SLOTS: list[dict] = [
     {

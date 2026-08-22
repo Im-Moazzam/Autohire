@@ -19,6 +19,7 @@ from app.models.background_task import BackgroundTask
 from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter, RecruiterState
+from app.models.scheduling import SchedulingPreference
 from app.models.template import FormTemplate
 from app.worker import celery_app
 
@@ -61,6 +62,7 @@ def db_session() -> Generator[Session, None, None]:
     session.query(JobPosting).delete()
     session.query(ApiUsageLog).delete()
     session.query(FormTemplate).delete()
+    session.query(SchedulingPreference).delete()
     session.query(Recruiter).delete()
     session.commit()
     session.close()

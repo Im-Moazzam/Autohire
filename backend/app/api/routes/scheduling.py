@@ -1,15 +1,18 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session
 
 from app.api import fixtures
-from app.api.deps import get_current_recruiter
+from app.api.deps import get_current_recruiter, get_db
+from app.models.recruiter import Recruiter
 from app.schemas.common import error_responses
 from app.schemas.scheduling import (
     AvailableSlotOut,
     SchedulingPreferencesIn,
     SchedulingPreferencesOut,
 )
+from app.services import scheduling_service
 
 router = APIRouter(
     prefix="/scheduling",
@@ -19,9 +22,12 @@ router = APIRouter(
 
 
 @router.get("/preferences", response_model=SchedulingPreferencesOut, responses=error_responses(401))
-def get_preferences() -> SchedulingPreferencesOut:
-    # STUB: US-24
-    return SchedulingPreferencesOut(**fixtures.SCHEDULING_PREFERENCES)
+def get_preferences(
+    db: Session = Depends(get_db),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+) -> SchedulingPreferencesOut:
+    # Never 404 — GET before any PUT returns synthesized defaults (US-24).
+    return scheduling_service.get_preferences(db, recruiter.recruiter_id)
 
 
 @router.put(
@@ -29,13 +35,14 @@ def get_preferences() -> SchedulingPreferencesOut:
     response_model=SchedulingPreferencesOut,
     responses=error_responses(401, 422),
 )
-def update_preferences(payload: SchedulingPreferencesIn) -> SchedulingPreferencesOut:
-    # STUB: US-24 — singleton, PUT (ADR-004 P6).
-    return SchedulingPreferencesOut(
-        preference_id=fixtures.PREFERENCE_ID,
-        last_synced_at=fixtures.SCHEDULING_PREFERENCES["last_synced_at"],
-        **payload.model_dump(),
-    )
+def update_preferences(
+    payload: SchedulingPreferencesIn,
+    db: Session = Depends(get_db),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+) -> SchedulingPreferencesOut:
+    # Upsert — one row per recruiter, ever. Never 409 on "already exists" (US-24).
+    row = scheduling_service.upsert_preferences(db, recruiter.recruiter_id, payload)
+    return SchedulingPreferencesOut.model_validate(row)
 
 
 @router.get(

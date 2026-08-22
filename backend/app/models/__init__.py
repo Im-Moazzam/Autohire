@@ -4,6 +4,7 @@ from app.models.background_task import BackgroundTask
 from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
+from app.models.scheduling import SchedulingPreference
 from app.models.template import FormTemplate, TemplateField
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "FormTemplate",
     "JobPosting",
     "Recruiter",
+    "SchedulingPreference",
     "TemplateField",
 ]

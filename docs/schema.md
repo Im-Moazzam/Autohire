@@ -74,15 +74,27 @@ ERD (US-01); see `docs/drift.md`.
 | available_start_time | TIME | NOT NULL |
 | available_end_time | TIME | NOT NULL |
 | slot_duration_minutes | INTEGER | NOT NULL, DEFAULT 30 |
+| timezone | TEXT | NOT NULL — IANA name, set from `SCHEDULING_TIMEZONE` at insert, never rewritten by an update |
 | last_synced_at | TIMESTAMPTZ | NULL |
 
-CHECK: `available_start_time < available_end_time`. `available_days` is `TEXT[]`
-rather than `weekday_enum[]` (Postgres enum arrays are workable but awkward with
-SQLAlchemy) but should be constrained via a `CHECK` that every element is one of
-`weekday_enum`'s values, not left free-form. **Currently untyped** — there is no
-migration for `scheduling_preferences` yet, so this constraint has no home until one
-lands. Add it in **US-24** (Availability windows), the story that creates this table;
-don't let it slip to a later cleanup pass.
+Built in **US-24**. `available_days` is `TEXT[]` rather than `weekday_enum[]`
+(Postgres enum arrays are workable but awkward with SQLAlchemy), constrained instead
+by `ck_scheduling_preferences_days_valid` — non-empty, and every element one of
+`weekday_enum`'s values. `ck_scheduling_preferences_window`:
+`available_start_time < available_end_time`.
+`ck_scheduling_preferences_slot_duration`: `15 <= slot_duration_minutes <= 120`. All
+three duplicate validation already done by `SchedulingPreferencesIn` — they exist as
+invariants-of-last-resort, not as the primary error path; the API never reaches them.
+
+**Timezone.** `available_start_time`/`available_end_time` are wall-clock, not UTC —
+interpreted in the zone named by this row's `timezone` column. There is one zone for
+the whole app, `SCHEDULING_TIMEZONE` (`app/core/config.py`, default `Asia/Karachi`),
+not a per-recruiter setting; the value is copied onto the row at write time rather
+than read live from the setting, so a saved row keeps meaning what it meant when
+entered even if the app-wide default changes later. `GET /scheduling/preferences`
+before any `PUT` returns synthesized Mon–Fri/09:00–17:00/30min defaults with
+`preference_id: null` — nothing is written, so "a row exists" means "the recruiter
+set this."
 
 ### form_templates (N:1 -> recruiters)
 | Column | Type | Notes |
