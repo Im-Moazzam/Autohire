@@ -222,6 +222,15 @@ see ADR-003), and `evidence_snippets` added because US-23 has no home otherwise.
 Embedding dimension is config-driven — 384 local, 1536 OpenAI. Never hardcode it.
 
 ### interview_slots
+
+Implemented in US-26. Two departures from the baseline above, both in
+`docs/drift.md`: `intent_detected` is omitted (needs `intent_enum`, which only
+Phase 2 defines — adding a column for an enum that doesn't exist is exactly the
+mid-story schema addition CLAUDE.md rules out), and the plain INDEX on
+`(recruiter_id, scheduled_at)` became a partial UNIQUE — the story's AC requires
+double-booking enforced "with the index plus a conflict check, not hope," and a
+plain index enforces nothing by itself.
+
 | Column | Type | Notes |
 |---|---|---|
 | slot_id | UUID | PK |
@@ -231,16 +240,35 @@ Embedding dimension is config-driven — 384 local, 1536 OpenAI. Never hardcode 
 | google_calendar_event_id | VARCHAR(255) | NULL |
 | google_meet_link | TEXT | NULL |
 | status | slot_status_enum | NOT NULL, DEFAULT 'PENDING' |
-| candidate_reply_text | TEXT | NULL |
-| intent_detected | intent_enum | NULL |
-| reschedule_reason | TEXT | NULL |
+| candidate_reply_text | TEXT | NULL — Phase 2, column exists, unused |
+| reschedule_reason | TEXT | NULL — Phase 2, column exists, unused |
 | created_at / updated_at | TIMESTAMPTZ | |
 
 Multiple rows per candidate model reschedule history. Only one may be live:
-partial UNIQUE (candidate_id) WHERE status IN ('PENDING','CONFIRMED').
-INDEX (recruiter_id, scheduled_at) for conflict checks.
+partial UNIQUE `uq_interview_slots_candidate_live` on `candidate_id` WHERE
+status IN ('PENDING','CONFIRMED'). A second partial UNIQUE,
+`uq_interview_slots_recruiter_time` on `(recruiter_id, scheduled_at)` WHERE
+status IN ('PENDING','CONFIRMED'), is a concurrency backstop for two slots
+landing on the exact same instant — it does **not**, by itself, catch two
+slots whose *intervals* overlap when `duration_minutes` differs between them
+(e.g. a recruiter shortens their slot length and reschedules). That overlap
+case is caught by an application-level interval check in
+`interview_service.generate_slots`, which compares `[scheduled_at,
+scheduled_at + duration_minutes)` against every live slot's own stored
+duration, not the current preference's.
+
+Slot generation reads `ZoneInfo(scheduling_preferences.timezone)` for the
+row being scheduled against — never `settings.scheduling_timezone` directly
+(ADR-005).
 
 ### email_logs
+
+Implemented in US-27. `email_type_enum` and `delivery_status_enum` are the full
+`app.schemas.enums.EmailType` (six members) / `DeliveryStatus` sets, not the two
+email types this doc happened to list before — the Python enum is already the
+source of truth used across the codebase (`docs/drift.md`). Only
+`INTERVIEW_INVITE` is actually sent by this story; the rest are Phase 2.
+
 | Column | Type | Notes |
 |---|---|---|
 | email_id | UUID | PK |
@@ -255,9 +283,21 @@ INDEX (recruiter_id, scheduled_at) for conflict checks.
 | delivery_status | delivery_status_enum | NOT NULL |
 | is_automated | BOOLEAN | NOT NULL |
 
-`idempotency_key` is new and it directly kills defect #6 in your log (duplicate
-confirmation emails). Build it as `{candidate_id}:{email_type}:{slot_id or 'none'}`
-and let the UNIQUE constraint do the work — retries become harmless no-ops.
+`idempotency_key` is `{candidate_id}:{email_type}:{slot_id or 'none'}` and the
+UNIQUE constraint does the entire dedupe — retries become harmless no-ops. No
+application-level check sits on top of it, by design.
+
+`sent_at` is set when the send is **attempted** (row insert, before the
+`Mailer` call), not when delivery completes — it stays NOT NULL for a
+`PENDING` row this way. This matters because the row is claimed *before*
+sending: a crash between commit and send leaves an unsent `PENDING` row that
+a Celery redelivery cannot heal (its insert hits the same idempotency
+constraint and no-ops, since "duplicate" and "orphaned attempt" look
+identical to the insert). A `PENDING` row whose `sent_at` is old is a stalled
+attempt, distinguishable from a genuinely in-flight one by age alone — the
+frontend can use this to show "stuck" rather than a perpetual "sending".
+This is the deliberate trade in the idempotency design: an unsent row is
+recoverable and visible; a duplicate send to a candidate is not.
 
 ### background_tasks
 | Column | Type | Notes |
@@ -272,14 +312,34 @@ and let the UNIQUE constraint do the work — retries become harmless no-ops.
 | started_at | TIMESTAMPTZ | NOT NULL |
 | completed_at | TIMESTAMPTZ | NULL |
 | retry_count | INTEGER | NOT NULL, DEFAULT 0 |
+| result_summary | JSONB | NULL — added US-26 |
 
 Every Celery task writes a row here **on enqueue**, not on start. Otherwise a worker
 that dies before picking the job up leaves no trace, and US-34 has nothing to show.
 
-Implemented in US-15/16 (`RESUME_PARSE` only so far). One addition beyond this table:
-a partial UNIQUE index on `job_id WHERE task_type = 'RESUME_PARSE' AND status IN
-('PENDING', 'RUNNING')` — the actual concurrency guard behind the 409
-`PROCESSING_IN_PROGRESS` check, same precedent as `candidates`' partial unique index.
+Implemented in US-15/16 (`RESUME_PARSE`), widened in US-18/19 (`BATCH_RANKING`) and
+again in US-26 (`CALENDAR_SYNC`). One addition beyond this table: a partial UNIQUE
+index `uq_background_tasks_job_active` on `job_id WHERE task_type IN ('RESUME_PARSE',
+'BATCH_RANKING', 'CALENDAR_SYNC') AND status IN ('PENDING', 'RUNNING')` — the actual
+concurrency guard behind the 409 `PROCESSING_IN_PROGRESS` check, same precedent as
+`candidates`' partial unique index. `EMAIL_DISPATCH` is deliberately not in this
+predicate: it's per-slot, not per-job, and its own idempotency is the `email_logs`
+UNIQUE key, not this index.
+
+`result_summary` (US-26, TC-04) carries `{scheduled, unscheduled: [{candidate_id,
+full_name, reason}], horizon_days}` for a completed `CALENDAR_SYNC` task — "more
+candidates than available slots" must be reported explicitly, never silently
+dropped, and the shortfall is only known once the task runs, so it has to land
+somewhere the client polls. Nullable and additive: `RESUME_PARSE`/`BATCH_RANKING`
+tasks leave it NULL, and `TaskOut` returns `null` for it on every other task type —
+this is a backward-compatible addition to a response model already shared by three
+enqueue flows, not a breaking change to any of them.
+
+`GET /tasks/{task_id}` is real as of US-26 — it was left as a TS-02 stub through
+US-15/16/18/19, which each shipped their own job-scoped status endpoint instead
+(`GET /jobs/{id}/process-status`) and never wired the generic poll target ADR-004
+P4 promises. `result_summary` had nowhere else to be polled from, so this closes
+that gap rather than adding a fifth ad hoc status shape.
 
 ---
 

@@ -1042,6 +1042,10 @@ export interface components {
             completed_at: string | null;
             /** Error Message */
             error_message: string | null;
+            /** Result Summary */
+            result_summary?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * TaskStatus
@@ -2608,15 +2612,6 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorOut"];
                 };
             };
-            /** @description Not Found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorOut"];
-                };
-            };
             /** @description Conflict */
             409: {
                 headers: {
@@ -2717,6 +2712,15 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

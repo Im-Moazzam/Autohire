@@ -3,6 +3,58 @@
 ## [Unreleased]
 
 ### Added
+- US-26/US-27: auto-scheduled interviews and invitation email — the last story
+  in Phase 1; the pipeline now runs end to end (sign in -> template -> launch
+  job -> apply -> parse -> rank -> schedule -> email in Mailhog). Two commits:
+  - **Scheduling.** `interview_slots` (partial UNIQUE
+    `uq_interview_slots_candidate_live` on `candidate_id` — one live slot per
+    candidate, history retained on reschedule; partial UNIQUE
+    `uq_interview_slots_recruiter_time` as a concurrency backstop for
+    exact-timestamp double-booking). `POST /interviews` validates job/candidate
+    ownership, that every candidate is `RANKED` (422 otherwise), a
+    `scheduling_preferences` row exists (409 `NO_SCHEDULING_PREFERENCES`), and
+    no other active task is running for the job, then enqueues `CALENDAR_SYNC`
+    — same plumbing as `RESUME_PARSE`/`BATCH_RANKING` (row committed before
+    `.delay()`, `uq_background_tasks_job_active` widened to include
+    `CALENDAR_SYNC`). `interview_service.generate_slots` reads
+    `ZoneInfo(scheduling_preferences.timezone)` for the row being scheduled
+    against, never the live `SCHEDULING_TIMEZONE` setting (ADR-005), and
+    rejects any candidate slot overlapping an existing live slot's own
+    `[scheduled_at, scheduled_at + duration_minutes)` interval — not merely an
+    exact-timestamp match, so a changed `slot_duration_minutes` between runs
+    can't produce an undetected overlap. `CalendarStore` is the third resource
+    adapter (`LocalCalendarStore` / `GoogleCalendarStore` through
+    `google_call`, `ResumeStore`'s shape exactly). Ordering as in US-06: the
+    slot row commits, then the Calendar event is created, then the row updates
+    with the event id — no DB transaction held across the Google call; a
+    Calendar failure leaves the slot present and retryable, and the candidate
+    stays `RANKED`, never `INVITED` with nothing. A candidate with no slot
+    available in the 14-day horizon, an already-live slot, or a Calendar
+    failure is recorded — never silently dropped — in a new
+    `background_tasks.result_summary JSONB` column
+    (`{scheduled, unscheduled: [...], horizon_days}`), polled at
+    `GET /tasks/{task_id}` (now wired to real data — see below).
+  - **Email.** `email_logs` (`idempotency_key = "{candidate_id}:{email_type}:
+    {slot_id or 'none'}"`, UNIQUE — the entire dedupe mechanism; no
+    application-level check on top of it). `EMAIL_DISPATCH` is enqueued once a
+    slot's Calendar event exists, claims its idempotency key (insert + commit)
+    *before* attempting the send, then renders one fixed `INTERVIEW_INVITE`
+    template (candidate name, job title, date/time in the recruiter's saved
+    timezone, duration, Meet link — one template, not a template system) and
+    sends via `Mailer` (`LocalMailer` — stdlib `smtplib` against the existing
+    Mailhog service, 10s timeout to fail fast into the retryable path rather
+    than hang the worker; `GmailMailer` through `google_call`). A send failure
+    never rolls back the slot — `delivery_status` records `FAILED`, the
+    interview stays booked. `email_logs.sent_at` is set at claim time (attempt
+    started), not delivery time, so a `PENDING` row's age distinguishes a
+    stalled attempt from a genuinely in-flight one. `GET /jobs/{id}/emails` and
+    `GET /jobs/{id}/slots` retire the last of `fixtures.CANDIDATES`
+    (`candidate_name()`), wired instead at the existing top-level
+    `GET /interviews`/`GET /emails` paths per ADR-004 P2 (docs/drift.md row 52).
+  - `GET /tasks/{task_id}` is real for the first time — it was left a TS-02
+    stub through three prior stories that each built their own job-scoped
+    status endpoint instead of ever wiring the generic poll target ADR-004 P4
+    promises (docs/drift.md row 56).
 - US-24: recruiter availability windows. `scheduling_preferences`
   (`UNIQUE(recruiter_id)` — one row per recruiter, ever), real
   `GET`/`PUT /scheduling/preferences` replacing the TS-02 stub. `PUT` upserts,
