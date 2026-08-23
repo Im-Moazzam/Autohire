@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import TIMESTAMP, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Enum
 
@@ -42,3 +42,7 @@ class BackgroundTask(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer(), nullable=False, default=0)
+    # TC-04 (US-26): {scheduled, unscheduled: [{candidate_id, full_name, reason}],
+    # horizon_days} for CALENDAR_SYNC. Nullable and additive — RESUME_PARSE and
+    # BATCH_RANKING tasks leave this NULL.
+    result_summary: Mapped[dict | None] = mapped_column(JSONB(), nullable=True)

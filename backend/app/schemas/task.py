@@ -15,6 +15,8 @@ class TaskOut(BaseModel):
     started_at: datetime
     completed_at: datetime | None
     error_message: str | None
+    # CALENDAR_SYNC only (US-26 TC-04); null for every other task type.
+    result_summary: dict | None = None
 
 
 class ProcessStatusOut(BaseModel):

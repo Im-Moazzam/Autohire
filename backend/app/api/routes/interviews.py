@@ -1,13 +1,18 @@
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from app.api import fixtures
-from app.api.deps import get_current_recruiter
-from app.schemas.common import Page, PaginationParams, error_responses, paginate, pagination_params
+from app.api.deps import get_current_recruiter, get_db
+from app.models.candidate import Candidate
+from app.models.recruiter import Recruiter
+from app.schemas.common import Page, PaginationParams, error_responses, pagination_params
 from app.schemas.enums import SlotStatus
 from app.schemas.scheduling import InterviewCreate, InterviewSlotOut, InterviewSlotUpdate
 from app.schemas.task import TaskOut
+from app.services import interview_service
 
 router = APIRouter(
     prefix="/interviews",
@@ -17,6 +22,8 @@ router = APIRouter(
 
 
 def _to_slot_out(slot: dict) -> InterviewSlotOut:
+    # STUB helper — only PATCH /interviews/{slot_id} (reschedule/cancel,
+    # Phase 2) still uses the fixture shape.
     return InterviewSlotOut(**slot, candidate_name=fixtures.candidate_name(slot["candidate_id"]))
 
 
@@ -24,16 +31,17 @@ def _to_slot_out(slot: dict) -> InterviewSlotOut:
     "",
     response_model=TaskOut,
     status_code=status.HTTP_202_ACCEPTED,
-    responses=error_responses(401, 404, 422),
+    responses=error_responses(401, 404, 409, 422),
 )
-def schedule_interviews(payload: InterviewCreate) -> TaskOut:
-    # STUB: US-26 — batch/async, 202 TaskOut polled at GET /tasks/{id} (ADR-004 P4).
-    if payload.job_id not in fixtures.JOBS:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "JOB_NOT_FOUND", "message": "Job not found."},
-        )
-    return TaskOut(**fixtures.TASKS[fixtures.TASK_RUNNING_ID])
+def schedule_interviews(
+    payload: InterviewCreate,
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> TaskOut:
+    task = interview_service.enqueue_scheduling(
+        db, recruiter, payload.job_id, payload.candidate_ids
+    )
+    return TaskOut.model_validate(task)
 
 
 @router.get("", response_model=Page[InterviewSlotOut], responses=error_responses(401))
@@ -41,21 +49,49 @@ def list_interviews(
     job_id: uuid.UUID | None = Query(default=None),
     status_filter: SlotStatus | None = Query(default=None, alias="status"),
     params: PaginationParams = Depends(pagination_params),
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
 ) -> Page[InterviewSlotOut]:
-    # STUB: US-26 — cross-job master schedule, top-level with ?job_id= (ADR-004 P2).
-    slots = list(fixtures.INTERVIEW_SLOTS.values())
-    if job_id is not None:
-        slots = [s for s in slots if s["job_id"] == job_id]
-    if status_filter is not None:
-        slots = [s for s in slots if s["status"] == status_filter]
-    return paginate([_to_slot_out(s) for s in slots], params)
+    slots, total = interview_service.list_slots(
+        db, recruiter.recruiter_id, params, job_id, status_filter
+    )
+    names = _candidate_names(db, [slot.candidate_id for slot in slots])
+    return Page[InterviewSlotOut](
+        items=[
+            InterviewSlotOut(
+                slot_id=slot.slot_id,
+                candidate_id=slot.candidate_id,
+                candidate_name=names.get(slot.candidate_id, ""),
+                job_id=slot.job_id,
+                scheduled_at=slot.scheduled_at,
+                duration_minutes=slot.duration_minutes,
+                status=slot.status,
+                google_meet_link=slot.google_meet_link,
+            )
+            for slot in slots
+        ],
+        total=total,
+        page=params.page,
+        size=params.size,
+    )
+
+
+def _candidate_names(db: Session, candidate_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+    if not candidate_ids:
+        return {}
+    rows = db.execute(
+        select(Candidate.candidate_id, Candidate.full_name).where(
+            Candidate.candidate_id.in_(candidate_ids)
+        )
+    ).all()
+    return {candidate_id: full_name for candidate_id, full_name in rows}
 
 
 @router.patch(
     "/{slot_id}", response_model=InterviewSlotOut, responses=error_responses(401, 404, 422)
 )
 def update_interview(slot_id: uuid.UUID, payload: InterviewSlotUpdate) -> InterviewSlotOut:
-    # STUB: US-26 — cancel and reschedule are both PATCH.
+    # STUB: Phase 2 — cancel and reschedule are both PATCH.
     slot = fixtures.INTERVIEW_SLOTS.get(slot_id)
     if slot is None:
         raise HTTPException(
