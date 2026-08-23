@@ -2,6 +2,10 @@ from fastapi.testclient import TestClient
 
 from app.api import fixtures
 
+# GET /emails moved to test_emails.py (US-27) — it's real now, not a stub.
+# Only POST /emails/send (manual, ad hoc send) is still a stub — out of this
+# story's scope, per docs/stories/US-26-27.md.
+
 
 def test_send_email_returns_task(authed_client: TestClient) -> None:
     response = authed_client.post(
@@ -13,17 +17,3 @@ def test_send_email_returns_task(authed_client: TestClient) -> None:
     )
     assert response.status_code == 202
     assert response.json()["task_id"]
-
-
-def test_list_emails_includes_failed_delivery(authed_client: TestClient) -> None:
-    response = authed_client.get("/api/v1/emails")
-    assert response.status_code == 200
-    items = response.json()["items"]
-    assert any(item["delivery_status"] == "FAILED" for item in items)
-    assert all("candidate_name" in item for item in items)
-
-
-def test_list_emails_filter_by_job(authed_client: TestClient) -> None:
-    response = authed_client.get("/api/v1/emails", params={"job_id": str(fixtures.JOB_LIVE_ID)})
-    assert response.status_code == 200
-    assert response.json()["total"] >= 1
