@@ -5,6 +5,7 @@ import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorMessage } from "../lib/http";
 import {
+  canProcessJob,
   JOB_STATUS_LABELS,
   useJobs,
   useTriggerProcess,
@@ -40,7 +41,7 @@ function JobCard({ job }: { job: Job }) {
   const { showToast } = useToast();
   const triggerProcess = useTriggerProcess();
 
-  const canProcess = job.status === "LIVE" && job.submission_count > 0;
+  const process = canProcessJob(job);
   const canShare = job.status !== "DRAFT";
 
   function handleProcess() {
@@ -96,14 +97,8 @@ function JobCard({ job }: { job: Job }) {
           <button
             type="button"
             onClick={handleProcess}
-            disabled={!canProcess || triggerProcess.isPending}
-            title={
-              !canProcess
-                ? job.status !== "LIVE"
-                  ? "Only live jobs can be processed"
-                  : "No applications to process yet"
-                : undefined
-            }
+            disabled={!process.allowed || triggerProcess.isPending}
+            title={process.allowed ? undefined : process.reason}
             className={buttonClassName({
               className: "px-4 py-2 text-table disabled:opacity-40",
             })}
