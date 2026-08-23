@@ -451,6 +451,38 @@ def test_scanned_image_pdf_is_parse_error_with_distinct_message(
     assert scanned.parse_error != corrupt.parse_error
 
 
+# TC-02 (TS-06/R-02): a PARSE_ERROR candidate left over after a rank run must
+# be retryable even though batch_ranking already flipped the job to PROCESSED.
+def test_process_on_processed_job_retries_parse_error_ranked_untouched(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    bad = _add_candidate_with_resume(db_session, job_id, "bad@example.com", "corrupt.pdf")
+    bad.submission_status = "PARSE_ERROR"
+    bad.parse_error = "Scanned PDF had no extractable text layer."
+    ranked = _add_candidate(db_session, job_id, "ranked@example.com")
+    ranked.submission_status = "RANKED"
+    job_row = db_session.get(JobPosting, job_id)
+    assert job_row is not None
+    job_row.status = "PROCESSED"
+    db_session.commit()
+
+    with _mock_delay():
+        response = authed_client.post(f"/api/v1/jobs/{job['job_id']}/process")
+    assert response.status_code == 202, response.text
+
+    task_id = response.json()["task_id"]
+    Path(bad.resume_storage_key).write_bytes((_FIXTURES / "Moazzam_Resume.pdf").read_bytes())
+    resume_parse_job.run(task_id)
+
+    db_session.expire_all()
+    db_session.refresh(bad)
+    db_session.refresh(ranked)
+    assert bad.submission_status == "PARSED"
+    assert ranked.submission_status == "RANKED"  # untouched
+
+
 # TC-09
 def test_retrigger_only_reprocesses_parse_error_not_parsed(
     authed_client: TestClient, db_session: Session

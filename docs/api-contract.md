@@ -118,11 +118,12 @@ can't answer them would only fail later, as a candidate-facing 500 at submission
 | GET | `/jobs/{id}/process/status` | `ProcessStatusOut` — `total`/`processed`/`failed` computed from `candidates.submission_status`, not task state |
 | POST | `/jobs/{id}/rank` | async (P4) — 202 `TaskOut`; 409 unless status=CLOSED/PROCESSED and a `PARSED`/`RANKED` candidate exists (US-18) |
 
-**`POST /jobs/{id}/process` 409s, US-15/16.** Three distinct codes, checked in this
-order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE` task for this job is already
-`PENDING`/`RUNNING` — enforced by a partial unique index, not just a pre-check),
-`INVALID_STATE_TRANSITION` (job isn't `CLOSED`), `NO_CANDIDATES` (job has zero live
-candidates). The `background_tasks` row is written before the Celery task is
+**`POST /jobs/{id}/process` 409s, US-15/16 (widened TS-06/R-02).** Three distinct
+codes, checked in this order: `PROCESSING_IN_PROGRESS` (a `RESUME_PARSE`/`BATCH_RANKING`/
+`CALENDAR_SYNC` task for this job is already `PENDING`/`RUNNING` — enforced by a
+partial unique index, not just a pre-check), `INVALID_STATE_TRANSITION` (job isn't
+`CLOSED` or `PROCESSED` — a `PROCESSED` job with a `PARSE_ERROR` candidate left over
+from a rank run must stay retryable), `NO_CANDIDATES` (job has zero live candidates). The `background_tasks` row is written before the Celery task is
 dispatched, so a trace exists even if the broker never picks it up.
 
 **`POST /jobs/{id}/rank` 409s, US-18.** Same shape and same three-code order as

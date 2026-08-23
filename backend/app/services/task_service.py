@@ -23,7 +23,7 @@ _NO_CANDIDATES = {
 }
 _INVALID_STATE = {
     "code": "INVALID_STATE_TRANSITION",
-    "message": "Job must be CLOSED with candidates to process.",
+    "message": "Job must be CLOSED or PROCESSED with candidates to process.",
 }
 _NO_PARSED_CANDIDATES = {
     "code": "NO_PARSED_CANDIDATES",
@@ -85,7 +85,7 @@ def enqueue_resume_parse(db: Session, recruiter: Recruiter, job: JobPosting) -> 
     if active_task_for_job(db, job.job_id) is not None:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_PROCESSING_IN_PROGRESS)
 
-    if job.status != JobStatus.CLOSED:
+    if job.status not in (JobStatus.CLOSED, JobStatus.PROCESSED):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_INVALID_STATE)
 
     has_candidates = (
