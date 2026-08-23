@@ -3,7 +3,6 @@ import uuid
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_db
 from app.models.recruiter import Recruiter
 from app.schemas.common import error_responses
@@ -12,7 +11,7 @@ from app.schemas.scheduling import (
     SchedulingPreferencesIn,
     SchedulingPreferencesOut,
 )
-from app.services import scheduling_service
+from app.services import interview_service, scheduling_service
 
 router = APIRouter(
     prefix="/scheduling",
@@ -48,13 +47,18 @@ def update_preferences(
 @router.get(
     "/available-slots",
     response_model=list[AvailableSlotOut],
-    responses=error_responses(401, 404, 409),
+    responses=error_responses(401, 409),
 )
 def available_slots(
     job_id: uuid.UUID | None = Query(default=None),
     count: int = Query(default=10, ge=1, le=50),
+    db: Session = Depends(get_db),
+    recruiter: Recruiter = Depends(get_current_recruiter),
 ) -> list[AvailableSlotOut]:
-    # STUB: US-26 — computed and bounded by count, not Page[T] (ADR-004 P5).
-    # job_id narrows against the job's recruiter's calendar once real; unused in the stub.
+    # Computed and bounded by count, not Page[T] (ADR-004 P5). A recruiter's
+    # availability isn't per-job, so job_id doesn't narrow anything here —
+    # it's accepted for API-shape symmetry with the rest of the story's
+    # ?job_id= convention, and reserved for a future per-job filter.
     del job_id
-    return [AvailableSlotOut(**slot) for slot in fixtures.AVAILABLE_SLOTS[:count]]
+    windows = interview_service.available_slots_for_recruiter(db, recruiter.recruiter_id, count)
+    return [AvailableSlotOut(starts_at=start, ends_at=end) for start, end in windows]

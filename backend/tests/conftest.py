@@ -17,6 +17,8 @@ from app.main import app
 from app.models.api_usage_log import ApiUsageLog
 from app.models.background_task import BackgroundTask
 from app.models.candidate import Candidate, CandidateFormResponse
+from app.models.email_log import EmailLog
+from app.models.interview import InterviewSlot
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter, RecruiterState
 from app.models.scheduling import SchedulingPreference
@@ -55,7 +57,10 @@ def celery_eager() -> Generator[None, None, None]:
 def db_session() -> Generator[Session, None, None]:
     session = SessionLocal()
     yield session
-    # FK order: BackgroundTask/CandidateFormResponse -> Candidate -> JobPosting -> FormTemplate.
+    # FK order: EmailLog -> InterviewSlot -> BackgroundTask/CandidateFormResponse
+    # -> Candidate -> JobPosting -> FormTemplate.
+    session.query(EmailLog).delete()
+    session.query(InterviewSlot).delete()
     session.query(BackgroundTask).delete()
     session.query(CandidateFormResponse).delete()
     session.query(Candidate).delete()

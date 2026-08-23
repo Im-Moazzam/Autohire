@@ -46,13 +46,27 @@ _PROCESSED_STATUSES = {
 }
 
 
-_ACTIVE_TASK_TYPES = (TaskType.RESUME_PARSE, TaskType.BATCH_RANKING)
+_ACTIVE_TASK_TYPES = (TaskType.RESUME_PARSE, TaskType.BATCH_RANKING, TaskType.CALENDAR_SYNC)
+
+
+def get_task(db: Session, recruiter_id: uuid.UUID, task_id: uuid.UUID) -> BackgroundTask | None:
+    """The poll target for every 202 response (ADR-004 P4) — closes a gap left
+    by TS-02: US-15/16/18/19 shipped their own job-scoped status endpoints
+    instead of ever wiring this route for real, but CALENDAR_SYNC's
+    result_summary (TC-04) has nowhere else to be polled from."""
+    return db.scalar(
+        select(BackgroundTask).where(
+            BackgroundTask.task_id == task_id, BackgroundTask.recruiter_id == recruiter_id
+        )
+    )
 
 
 def active_task_for_job(db: Session, job_id: uuid.UUID) -> BackgroundTask | None:
-    """Any PENDING/RUNNING RESUME_PARSE or BATCH_RANKING task for this job —
-    mirrors uq_background_tasks_job_active's widened predicate (US-18), so a
-    rank can't start mid-parse and vice versa."""
+    """Any PENDING/RUNNING RESUME_PARSE, BATCH_RANKING, or CALENDAR_SYNC task
+    for this job — mirrors uq_background_tasks_job_active's widened predicate
+    (US-18, widened again in US-26), so scheduling can't start mid-parse/rank
+    and vice versa. EMAIL_DISPATCH is deliberately not in this set — it's
+    per-slot, not per-job; its idempotency is the email_logs UNIQUE key."""
     return db.scalar(
         select(BackgroundTask).where(
             BackgroundTask.job_id == job_id,

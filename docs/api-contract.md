@@ -250,6 +250,24 @@ interpreted in `timezone`, which is copied onto the row from the app-wide
 API doesn't accept a `timezone` field, so it isn't per-recruiter yet.
 `recruiter_id` in the request body is rejected (`extra="forbid"`), never applied.
 
+**`GET /scheduling/available-slots` and `POST`/`GET /interviews` are real as of
+US-26.** `POST /interviews` validates, in order: job ownership (404
+`JOB_NOT_FOUND`), candidate ownership/job membership (404 `CANDIDATE_NOT_FOUND`),
+every candidate is `RANKED` (422 `INVALID_CANDIDATE_STATUS`), a
+`scheduling_preferences` row exists (409 `NO_SCHEDULING_PREFERENCES` — never an
+empty result), no other active task for the job (409 `PROCESSING_IN_PROGRESS`).
+The `CALENDAR_SYNC` task then generates slots from the preferences row's own
+`ZoneInfo(timezone)` (ADR-005), creates a Calendar event per slot (slot row
+commits first, then the event, then the row updates with the event id — no DB
+transaction held across the Google call), and moves each candidate `RANKED` ->
+`INVITED` only once its event exists. A candidate with no slot available in the
+14-day horizon, an existing live slot, or a Calendar failure is recorded in the
+task's `result_summary` (see `background_tasks` in `docs/schema.md`) rather than
+silently dropped or left `INVITED` with nothing. `PATCH /interviews/{id}` is
+still the TS-02 stub (Phase 2 — reschedule/cancel).
+
+`POST /scheduling/sync-calendar` remains out of scope (US-25).
+
 ## Email
 | Method | Path | Notes |
 |---|---|---|
@@ -258,14 +276,23 @@ API doesn't accept a `timezone` field, so it isn't per-recruiter yet.
 | GET | `/emails/replies` | Phase 2 — out of scope |
 | POST | `/emails/replies/{id}/resolve` | Phase 2 — out of scope |
 
-Collapsed from four endpoints to one typed endpoint. Every send carries an
-`idempotency_key`; duplicate keys return 200 with the original log row rather than
-sending twice.
+`GET /emails` is real as of US-27. `POST /emails/send` (manual, ad hoc send) is
+still the TS-02 stub — out of this story's scope; the only real send path is the
+automatic `INTERVIEW_INVITE` dispatched internally by `CALENDAR_SYNC` once a
+slot's Calendar event exists, never exposed as its own HTTP endpoint. Every send
+carries `idempotency_key = "{candidate_id}:{email_type}:{slot_id or 'none'}"`;
+a duplicate insert hits the UNIQUE constraint and no-ops (there is no
+application-level dedupe layered on top of it, and no 200-with-original-row
+response, since this path has no caller waiting on an HTTP response — see
+`email_logs` in `docs/schema.md`).
 
 ## Tasks
 | Method | Path | Notes |
 |---|---|---|
 | GET | `/tasks/{task_id}` | `TaskOut` — poll target for every 202 response (P4) |
+
+Real as of US-26 — see the `background_tasks` note in `docs/schema.md` for why
+this was still a TS-02 stub through three prior stories.
 
 ## Admin
 | Method | Path | Notes |
