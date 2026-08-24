@@ -2,6 +2,68 @@
 
 ## [Unreleased]
 
+### Fixed
+- TS-06: post-review remediation — 13 items from an external review
+  (2026-08-23) that ran the migrations on a virgin database, executed the
+  suite, regenerated the API contract, and drove a cold end-to-end pipeline
+  run. Every item was reproduced before fixing (none were NOT REPRODUCED),
+  one commit per item with a regression test that failed before the fix.
+  - **R-01**: `Jobs.tsx`'s AI-process button was enabled exactly when the
+    backend refused (`LIVE`) and disabled exactly when it would accept
+    (`CLOSED`+candidates). Extracted `canProcessJob()` to `lib/jobs.ts` as
+    the single source of truth, matching `task_service.enqueue_resume_parse`.
+  - **R-02**: a `PARSE_ERROR` candidate left over after a rank run could
+    never be retried once the job flipped to `PROCESSED` — widened
+    `enqueue_resume_parse`'s guard to `(CLOSED, PROCESSED)`, mirroring
+    `enqueue_batch_ranking`.
+  - **R-03**: `.doc` (OLE2) was sniffed and accepted at upload, but
+    `extract_text` has no handler for it — every `.doc` candidate silently
+    became `PARSE_ERROR`. Rejected at upload (415) instead; `Apply.tsx`
+    advertises `.pdf,.docx` only.
+  - **R-04**: `PATCH /interviews/{id}` and `POST /emails/send` still read
+    `app/api/fixtures.py` — the former 404'd on every real slot, the latter
+    always returned a stale fixture `TaskOut` whose `task_id` 404'd at
+    `GET /tasks/{id}`. Both are genuinely Phase 2; replaced with an honest
+    `501 NOT_IMPLEMENTED`.
+  - **R-05/R-06**: `GET /auth/me`/`PATCH /recruiters/me` didn't declare
+    `401`; `POST`/`PATCH /jobs` declared `502` but not the `500`
+    `finalize_launch` raises in local mode. Declared both — first
+    intentional `api.d.ts` regeneration since TS-02.
+  - **R-07**: `JobUpdate` had no future-date validator (`JobCreate` did) — a
+    `PATCH` with a past `expires_at` left a job `LIVE` while the public
+    endpoint immediately 410'd. Factored one shared validator.
+  - **R-08**: `JobBuilder.tsx`'s `expiresAtToDateInput` read the UTC date
+    from an ISO string while `dateToExpiresAt` wrote local `23:59:59` — at a
+    negative UTC offset, re-saving the edit form walked the deadline forward
+    a day per save. Now derives the local calendar date via
+    `toLocaleDateString("en-CA")`; both helpers moved to `lib/jobs.ts`.
+  - **R-09**: removed confirmed-dead code — `paginate()`, `ALLOWED_RESUME_TYPES`,
+    `PINECONE_API_KEY`/`PINECONE_INDEX` — and dropped
+    `job_postings.google_form_id`/`.google_form_url` and
+    `background_tasks.retry_count` via a reversible migration. Kept
+    `OPENAI_API_KEY` and `scheduling_preferences.last_synced_at`, both
+    reserved for TS-07.
+  - **R-10**: `calendar_sync`'s candidate query had no `job_id`/`deleted_at`
+    scoping (a soft-deleted candidate could still be scheduled and emailed),
+    and its `IntegrityError` handler always reported `"ALREADY_SCHEDULED"`
+    regardless of which partial-unique index fired. Fixed both; added
+    `"SLOT_TIME_TAKEN"` as a distinct reason.
+  - **R-11**: tests only. Covered the `except Exception -> FAILED` path in
+    both `calendar_sync` and `batch_ranking`, `calendar_sync`'s `NOT_RANKED`
+    race branch, and — the larger gap — `interview_service.py`'s
+    `enqueue_scheduling` happy path, `list_slots`, and
+    `available_slots_for_recruiter`, none of which had ever actually been
+    exercised through their HTTP routes.
+  - **R-12**: synced `docs/stories/README.md` statuses from the story files
+    (all Todo -> actual Done/Done-backend), sorted `docs/drift.md`'s
+    out-of-order rows, added drift rows 58-64 for this story's behaviour
+    changes.
+  - **R-13**: added a real apply-flow journey to the e2e suite (create
+    template + job via API as the seeded recruiter, submit through
+    `/apply/{slug}` in the browser, assert success then duplicate-email
+    rejection) — `smoke.spec.ts` alone was one trivial assertion for the
+    cost of a full Docker build.
+
 ### Added
 - US-26/US-27: auto-scheduled interviews and invitation email — the last story
   in Phase 1; the pipeline now runs end to end (sign in -> template -> launch
