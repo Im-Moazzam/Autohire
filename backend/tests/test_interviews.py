@@ -2,6 +2,7 @@ import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from unittest.mock import Mock, patch
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -295,6 +296,120 @@ def test_recruiter_time_collision_reports_slot_time_taken(
     assert task.result_summary["unscheduled"][0]["reason"] == "SLOT_TIME_TAKEN"
     # The pre-existing slot is untouched, and no second slot was created.
     assert db_session.query(InterviewSlot).count() == 1
+
+
+# TS-06/R-11: candidate.submission_status changed to something other than
+# RANKED between enqueue and task execution (the enqueue-time check already
+# required RANKED; this covers the task's own re-check of that race).
+def test_not_ranked_candidate_between_enqueue_and_run_is_unscheduled(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "stale@example.com")
+    candidate.submission_status = SubmissionStatus.INVITED
+    db_session.commit()
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    with _patch_calendar_store(), _no_op_email_dispatch():
+        calendar_sync_job.run(str(task.task_id), [str(candidate.candidate_id)])
+    db_session.expire_all()
+
+    assert db_session.query(InterviewSlot).count() == 0
+    db_session.refresh(task)
+    assert task.result_summary["unscheduled"][0]["reason"] == "NOT_RANKED"
+
+
+# TS-06/R-11: an exception inside _run_calendar_sync (not the per-candidate
+# outcomes, which are data) must mark the task FAILED and re-raise.
+def test_calendar_sync_exception_outside_loop_marks_task_failed(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "a@example.com")
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    with (
+        patch("app.tasks.calendar_sync.get_calendar_store", side_effect=RuntimeError("store down")),
+        pytest.raises(RuntimeError),
+    ):
+        calendar_sync_job.run(str(task.task_id), [str(candidate.candidate_id)])
+
+    db_session.expire_all()
+    db_session.refresh(task)
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message
+    assert task.completed_at is not None
+
+
+# TS-06/R-11: POST/GET /interviews and GET /scheduling/available-slots were
+# never actually exercised through their HTTP routes (test_schedule_* above
+# all drive calendar_sync_job.run() directly) — interview_service.py's
+# enqueue_scheduling happy path, list_slots, and available_slots_for_recruiter
+# were untested (66% coverage).
+def test_schedule_interviews_route_returns_202_with_real_task_id(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    candidate = _add_candidate(db_session, job["job_id"], "route@example.com")
+
+    with patch("app.tasks.calendar_sync.calendar_sync_job.delay") as delay:
+        delay.return_value.id = "fake-celery-id"
+        response = authed_client.post(
+            "/api/v1/interviews",
+            json={"job_id": job["job_id"], "candidate_ids": [str(candidate.candidate_id)]},
+        )
+
+    assert response.status_code == 202, response.text
+    task_id = response.json()["task_id"]
+    row = db_session.query(BackgroundTask).filter_by(task_id=uuid.UUID(task_id)).one()
+    assert row.task_type == TaskType.CALENDAR_SYNC
+    assert row.status == TaskStatus.PENDING
+
+
+def test_schedule_interviews_route_unknown_candidate_is_404(authed_client: TestClient) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+
+    response = authed_client.post(
+        "/api/v1/interviews",
+        json={"job_id": job["job_id"], "candidate_ids": [str(uuid.uuid4())]},
+    )
+    assert response.status_code == 404
+    assert response.json()["code"] == "CANDIDATE_NOT_FOUND"
+
+
+def test_list_interviews_route_returns_scheduled_slot(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "listed@example.com")
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    _run_calendar_sync(db_session, task, [candidate.candidate_id])
+
+    response = authed_client.get("/api/v1/interviews", params={"job_id": job["job_id"]})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["candidate_name"] == "listed"
+
+
+def test_available_slots_route_returns_windows(authed_client: TestClient) -> None:
+    _set_preferences(authed_client)
+
+    response = authed_client.get("/api/v1/scheduling/available-slots", params={"count": 3})
+    assert response.status_code == 200
+    windows = response.json()
+    assert len(windows) == 3
+    for window in windows:
+        assert window["starts_at"] < window["ends_at"]
 
 
 # TC-04
