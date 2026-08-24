@@ -1,5 +1,23 @@
-import { describe, expect, it } from "vitest";
-import { canProcessJob } from "./jobs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { canProcessJob, dateToExpiresAt, expiresAtToDateInput } from "./jobs";
+
+describe("dateToExpiresAt / expiresAtToDateInput round trip (TS-06/R-08)", () => {
+  const originalTZ = process.env.TZ;
+
+  beforeEach(() => {
+    process.env.TZ = "America/New_York"; // UTC-4/-5, a negative offset
+  });
+
+  afterEach(() => {
+    process.env.TZ = originalTZ;
+  });
+
+  it("returns the same local date that was entered", () => {
+    const entered = "2026-03-15";
+    const iso = dateToExpiresAt(entered);
+    expect(expiresAtToDateInput(iso)).toBe(entered);
+  });
+});
 
 describe("canProcessJob", () => {
   it("LIVE with candidates -> false", () => {

@@ -20,6 +20,21 @@ export interface JobListFilters {
   q?: string;
 }
 
+/** Applications close at the end of the chosen day (23:59:59 local), so a
+ * recruiter picking "today" doesn't accidentally close the job immediately. */
+export function dateToExpiresAt(date: string): string {
+  return new Date(`${date}T23:59:59`).toISOString();
+}
+
+/** The inverse of dateToExpiresAt — must read back the *local* calendar date
+ * that was entered, not the UTC date `iso` happens to fall on (TS-06/R-08).
+ * `iso.slice(0, 10)` was UTC while dateToExpiresAt writes local 23:59:59; at
+ * a negative UTC offset that walked the deadline forward a day on every
+ * open-then-resave of the edit form. en-CA gives YYYY-MM-DD directly. */
+export function expiresAtToDateInput(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-CA");
+}
+
 /** Mirrors task_service.enqueue_resume_parse's guard exactly (TS-06/R-01):
  * the backend only accepts a CLOSED job with at least one candidate. */
 export function canProcessJob(job: Pick<Job, "status" | "submission_count">): {
