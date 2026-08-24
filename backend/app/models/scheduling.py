@@ -53,6 +53,9 @@ class SchedulingPreference(Base):
     # later update, so a saved row keeps meaning what it meant when it was entered
     # even if the app-wide setting changes afterward.
     timezone: Mapped[str] = mapped_column(String(), nullable=False)
+    # Reserved: always NULL today — nothing writes a real value (US-26's
+    # calendar work may populate it later). Already in the generated client
+    # contract, so kept rather than dropped (TS-06/R-09).
     last_synced_at: Mapped[datetime | None] = mapped_column(TIMESTAMP(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()

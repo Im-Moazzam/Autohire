@@ -27,12 +27,6 @@ def pagination_params(
     return PaginationParams(page=page, size=size)
 
 
-def paginate(items: list[T], params: PaginationParams) -> Page[T]:  # noqa: UP047
-    start = (params.page - 1) * params.size
-    page_items = items[start : start + params.size]
-    return Page[T](items=page_items, total=len(items), page=params.page, size=params.size)
-
-
 class ErrorOut(BaseModel):
     code: str
     message: str

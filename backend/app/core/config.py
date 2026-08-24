@@ -27,17 +27,14 @@ class Settings(BaseSettings):
     # a wrong env var gives a silent per-container re-download, not an error.
     embedding_cache_dir: str = "/models"
 
+    # Reserved: no cloud analyzer exists yet (TS-07 may add an optional
+    # OpenAI embedder) — not dead, just not read by anything today.
     openai_api_key: str = ""
-    pinecone_api_key: str = ""
-    pinecone_index: str = "autohire"
 
     smtp_host: str = "mailhog"
     smtp_port: int = 1025
 
     max_resume_mb: int = 5
-    allowed_resume_types: str = (
-        "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
 
     # Where LocalResumeStore writes resume folders (APP_ENV=local). Defaults to
     # the docker-compose mount; not every process runs in that container (CI,
