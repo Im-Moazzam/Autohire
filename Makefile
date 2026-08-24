@@ -47,7 +47,7 @@ docs-api:   ## OpenAPI spec — replaces the hand-written API table
 	mkdir -p docs/generated
 	docker compose exec -T api python -m app.scripts.dump_openapi > docs/generated/openapi.json
 
-docs-erd:   ## ERD rendered from the live database
+docs-erd:   ## ERD rendered from SQLAlchemy metadata (app.models), not a live DB query
 	mkdir -p docs/generated
 	docker compose exec -T api python -m app.scripts.dump_erd > docs/generated/erd.puml
 	@echo "render at plantuml.com or with the PlantUML CLI"

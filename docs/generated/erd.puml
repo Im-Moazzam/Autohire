@@ -1,0 +1,167 @@
+@startuml
+entity recruiters {
+  * recruiter_id: UUID NOT NULL
+  google_user_id: VARCHAR(255) NOT NULL
+  email: VARCHAR(255) NOT NULL
+  full_name: VARCHAR(150) NOT NULL
+  profile_picture_url: TEXT
+  google_access_token: TEXT NOT NULL
+  google_refresh_token: TEXT
+  google_token_expires_at: TIMESTAMP NOT NULL
+  granted_scopes: JSONB NOT NULL
+  account_state: VARCHAR(15) NOT NULL
+  created_at: TIMESTAMP NOT NULL
+  last_login_at: TIMESTAMP
+}
+entity api_usage_logs {
+  * log_id: UUID NOT NULL
+  + recruiter_id: UUID
+  api_name: VARCHAR(15) NOT NULL
+  call_count: INTEGER NOT NULL
+  tokens_used: INTEGER
+  recorded_at: TIMESTAMP NOT NULL
+}
+entity form_templates {
+  * template_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  template_name: VARCHAR(150) NOT NULL
+  created_at: TIMESTAMP NOT NULL
+  updated_at: TIMESTAMP NOT NULL
+  deleted_at: TIMESTAMP
+}
+entity scheduling_preferences {
+  * preference_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  available_days: ARRAY NOT NULL
+  available_start_time: TIME NOT NULL
+  available_end_time: TIME NOT NULL
+  slot_duration_minutes: INTEGER NOT NULL
+  timezone: VARCHAR NOT NULL
+  last_synced_at: TIMESTAMP
+  created_at: TIMESTAMP NOT NULL
+  updated_at: TIMESTAMP NOT NULL
+}
+entity job_postings {
+  * job_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  + template_id: UUID NOT NULL
+  job_title: VARCHAR(200) NOT NULL
+  job_description: TEXT NOT NULL
+  jd_embedding_id: VARCHAR(255)
+  google_drive_folder_id: VARCHAR(255)
+  apply_slug: VARCHAR(64) NOT NULL
+  status: VARCHAR(9) NOT NULL
+  is_accepting_responses: BOOLEAN NOT NULL
+  expires_at: TIMESTAMP NOT NULL
+  created_at: TIMESTAMP NOT NULL
+  updated_at: TIMESTAMP NOT NULL
+  deleted_at: TIMESTAMP
+}
+entity template_fields {
+  * field_id: UUID NOT NULL
+  + template_id: UUID NOT NULL
+  field_label: VARCHAR(200) NOT NULL
+  field_type: VARCHAR(15) NOT NULL
+  is_required: BOOLEAN NOT NULL
+  field_order: INTEGER NOT NULL
+  options: JSONB
+}
+entity candidates {
+  * candidate_id: UUID NOT NULL
+  + job_id: UUID NOT NULL
+  full_name: VARCHAR(150) NOT NULL
+  email: VARCHAR(255) NOT NULL
+  phone_number: VARCHAR(30)
+  resume_drive_file_id: VARCHAR(255)
+  resume_drive_url: TEXT
+  resume_storage_key: VARCHAR(500)
+  submission_status: VARCHAR(11) NOT NULL
+  submitted_at: TIMESTAMP NOT NULL
+  parse_error: TEXT
+  resume_text: TEXT
+  deleted_at: TIMESTAMP
+}
+entity ai_analysis_results {
+  * analysis_id: UUID NOT NULL
+  + candidate_id: UUID NOT NULL
+  + job_id: UUID NOT NULL
+  semantic_score: FLOAT NOT NULL
+  rank_position: INTEGER NOT NULL
+  matched_skills: JSONB
+  missing_skills: JSONB
+  ai_feedback_summary: TEXT
+  evidence_snippets: JSONB
+  vector_id: VARCHAR(255)
+  embedding: VECTOR(384)
+  processed_at: TIMESTAMP NOT NULL
+}
+entity background_tasks {
+  * task_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  + job_id: UUID
+  + candidate_id: UUID
+  celery_task_id: VARCHAR(255)
+  task_type: VARCHAR(14) NOT NULL
+  status: VARCHAR(7) NOT NULL
+  error_message: TEXT
+  started_at: TIMESTAMP NOT NULL
+  completed_at: TIMESTAMP
+  result_summary: JSONB
+}
+entity candidate_form_responses {
+  * response_id: UUID NOT NULL
+  + candidate_id: UUID NOT NULL
+  + field_id: UUID NOT NULL
+  response_value: TEXT
+}
+entity interview_slots {
+  * slot_id: UUID NOT NULL
+  + candidate_id: UUID NOT NULL
+  + job_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  scheduled_at: TIMESTAMP NOT NULL
+  duration_minutes: INTEGER NOT NULL
+  google_calendar_event_id: VARCHAR(255)
+  google_meet_link: TEXT
+  status: VARCHAR(11) NOT NULL
+  candidate_reply_text: TEXT
+  reschedule_reason: TEXT
+  created_at: TIMESTAMP NOT NULL
+  updated_at: TIMESTAMP NOT NULL
+}
+entity email_logs {
+  * email_id: UUID NOT NULL
+  + recruiter_id: UUID NOT NULL
+  + candidate_id: UUID NOT NULL
+  + slot_id: UUID
+  email_type: VARCHAR(24) NOT NULL
+  subject: VARCHAR(255) NOT NULL
+  body_preview: TEXT
+  gmail_message_id: VARCHAR(255)
+  gmail_thread_id: VARCHAR(255)
+  idempotency_key: VARCHAR(255) NOT NULL
+  sent_at: TIMESTAMP NOT NULL
+  delivery_status: VARCHAR(7) NOT NULL
+  is_automated: BOOLEAN NOT NULL
+}
+api_usage_logs }o--|| recruiters
+form_templates }o--|| recruiters
+scheduling_preferences }o--|| recruiters
+job_postings }o--|| form_templates
+job_postings }o--|| recruiters
+template_fields }o--|| form_templates
+candidates }o--|| job_postings
+ai_analysis_results }o--|| candidates
+ai_analysis_results }o--|| job_postings
+background_tasks }o--|| candidates
+background_tasks }o--|| job_postings
+background_tasks }o--|| recruiters
+candidate_form_responses }o--|| candidates
+candidate_form_responses }o--|| template_fields
+interview_slots }o--|| job_postings
+interview_slots }o--|| candidates
+interview_slots }o--|| recruiters
+email_logs }o--|| candidates
+email_logs }o--|| interview_slots
+email_logs }o--|| recruiters
+@enduml

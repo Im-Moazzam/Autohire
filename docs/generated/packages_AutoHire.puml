@@ -1,0 +1,96 @@
+@startuml packages_AutoHire
+set namespaceSeparator none
+package "app.models" as app.models {
+}
+package "app.models.ai_analysis_result" as app.models.ai_analysis_result {
+}
+package "app.models.api_usage_log" as app.models.api_usage_log {
+}
+package "app.models.background_task" as app.models.background_task {
+}
+package "app.models.candidate" as app.models.candidate {
+}
+package "app.models.email_log" as app.models.email_log {
+}
+package "app.models.interview" as app.models.interview {
+}
+package "app.models.job" as app.models.job {
+}
+package "app.models.recruiter" as app.models.recruiter {
+}
+package "app.models.scheduling" as app.models.scheduling {
+}
+package "app.models.template" as app.models.template {
+}
+package "app.services" as app.services {
+}
+package "app.services.auth_service" as app.services.auth_service {
+}
+package "app.services.candidate_service" as app.services.candidate_service {
+}
+package "app.services.email_service" as app.services.email_service {
+}
+package "app.services.identity_fields" as app.services.identity_fields {
+}
+package "app.services.interview_service" as app.services.interview_service {
+}
+package "app.services.job_service" as app.services.job_service {
+}
+package "app.services.ranking_service" as app.services.ranking_service {
+}
+package "app.services.resume_parser" as app.services.resume_parser {
+}
+package "app.services.resume_validation" as app.services.resume_validation {
+}
+package "app.services.scheduling_service" as app.services.scheduling_service {
+}
+package "app.services.task_service" as app.services.task_service {
+}
+package "app.services.template_service" as app.services.template_service {
+}
+app.models --> app.models.ai_analysis_result
+app.models --> app.models.api_usage_log
+app.models --> app.models.background_task
+app.models --> app.models.candidate
+app.models --> app.models.email_log
+app.models --> app.models.interview
+app.models --> app.models.job
+app.models --> app.models.recruiter
+app.models --> app.models.scheduling
+app.models --> app.models.template
+app.models.job --> app.models.template
+app.services.auth_service --> app.models.recruiter
+app.services.candidate_service --> app.models.candidate
+app.services.candidate_service --> app.models.job
+app.services.candidate_service --> app.models.recruiter
+app.services.candidate_service --> app.models.template
+app.services.candidate_service --> app.services
+app.services.candidate_service --> app.services.identity_fields
+app.services.candidate_service --> app.services.resume_validation
+app.services.email_service --> app.models.candidate
+app.services.email_service --> app.models.email_log
+app.services.email_service --> app.models.interview
+app.services.email_service --> app.models.job
+app.services.interview_service --> app.models.background_task
+app.services.interview_service --> app.models.candidate
+app.services.interview_service --> app.models.interview
+app.services.interview_service --> app.models.recruiter
+app.services.interview_service --> app.models.scheduling
+app.services.interview_service --> app.services
+app.services.interview_service --> app.services.task_service
+app.services.job_service --> app.models.candidate
+app.services.job_service --> app.models.job
+app.services.job_service --> app.models.recruiter
+app.services.job_service --> app.models.template
+app.services.job_service --> app.services
+app.services.ranking_service --> app.models.ai_analysis_result
+app.services.ranking_service --> app.models.candidate
+app.services.scheduling_service --> app.models.scheduling
+app.services.task_service --> app.models.background_task
+app.services.task_service --> app.models.candidate
+app.services.task_service --> app.models.job
+app.services.task_service --> app.models.recruiter
+app.services.template_service --> app.models.template
+app.services.template_service --> app.services
+app.services.template_service --> app.services.identity_fields
+@enduml
