@@ -228,6 +228,75 @@ def test_two_runs_for_same_candidate_leave_one_live_slot(
     assert task2.result_summary["unscheduled"][0]["reason"] == "ALREADY_SCHEDULED"
 
 
+# TC-10 (TS-06/R-10): _run_calendar_sync selected candidates by candidate_id
+# only — no job_id, no deleted_at IS NULL — so a candidate soft-deleted
+# between enqueue and task execution was still scheduled and emailed.
+def test_soft_deleted_candidate_between_enqueue_and_run_is_not_scheduled(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "gone@example.com")
+
+    candidate.deleted_at = datetime.now(UTC)
+    db_session.commit()
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    with _patch_calendar_store(), _no_op_email_dispatch() as no_email:
+        calendar_sync_job.run(str(task.task_id), [str(candidate.candidate_id)])
+    db_session.expire_all()
+
+    assert db_session.query(InterviewSlot).count() == 0
+    no_email.assert_not_called()
+    db_session.refresh(task)
+    assert task.result_summary["scheduled"] == 0
+    assert task.result_summary["unscheduled"][0]["reason"] == "CANDIDATE_NOT_FOUND"
+
+
+# TC-11 (TS-06/R-10): the IntegrityError handler hard-coded "ALREADY_SCHEDULED"
+# regardless of which partial-unique index actually fired.
+# uq_interview_slots_recruiter_time (two different candidates, same recruiter,
+# exact same instant) must report "SLOT_TIME_TAKEN", not "ALREADY_SCHEDULED"
+# (which means "this candidate already has a live slot").
+def test_recruiter_time_collision_reports_slot_time_taken(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    taken_candidate = _add_candidate(db_session, job["job_id"], "first@example.com")
+    colliding_candidate = _add_candidate(db_session, job["job_id"], "second@example.com")
+
+    collision_time = datetime.now(UTC) + timedelta(days=1, hours=2)
+    db_session.add(
+        InterviewSlot(
+            candidate_id=taken_candidate.candidate_id,
+            job_id=job["job_id"],
+            recruiter_id=recruiter.recruiter_id,
+            scheduled_at=collision_time,
+            duration_minutes=30,
+            status=SlotStatus.PENDING,
+        )
+    )
+    db_session.commit()
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    with (
+        patch("app.tasks.calendar_sync.generate_slots", return_value=[collision_time]),
+        _patch_calendar_store(),
+        _no_op_email_dispatch(),
+    ):
+        calendar_sync_job.run(str(task.task_id), [str(colliding_candidate.candidate_id)])
+    db_session.expire_all()
+
+    db_session.refresh(task)
+    assert task.result_summary["scheduled"] == 0
+    assert task.result_summary["unscheduled"][0]["reason"] == "SLOT_TIME_TAKEN"
+    # The pre-existing slot is untouched, and no second slot was created.
+    assert db_session.query(InterviewSlot).count() == 1
+
+
 # TC-04
 def test_more_candidates_than_slots_reports_the_rest(
     authed_client: TestClient, db_session: Session

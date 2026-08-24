@@ -264,8 +264,13 @@ transaction held across the Google call), and moves each candidate `RANKED` ->
 `INVITED` only once its event exists. A candidate with no slot available in the
 14-day horizon, an existing live slot, or a Calendar failure is recorded in the
 task's `result_summary` (see `background_tasks` in `docs/schema.md`) rather than
-silently dropped or left `INVITED` with nothing. `PATCH /interviews/{id}` is
-still the TS-02 stub (Phase 2 — reschedule/cancel).
+silently dropped or left `INVITED` with nothing. `unscheduled[].reason` also
+distinguishes `ALREADY_SCHEDULED` (this candidate already has a live slot,
+`uq_interview_slots_candidate_live`) from `SLOT_TIME_TAKEN` (a different
+candidate collided on the exact same recruiter+instant,
+`uq_interview_slots_recruiter_time` — TS-06/R-10). `PATCH /interviews/{id}` is
+genuinely Phase 2 (reschedule/cancel) and returns `501 NOT_IMPLEMENTED`
+(TS-06/R-04).
 
 `POST /scheduling/sync-calendar` remains out of scope (US-25).
 
