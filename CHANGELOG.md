@@ -2,7 +2,22 @@
 
 ## [Unreleased]
 
+### Fixed
+- TS-08 (D-01): `make docs-erd` silently emitted `@startuml\n@enduml` for its entire
+  history — `backend/app/scripts/dump_erd.py` imported only `app.core.db.Base`, never
+  any model module, so `Base.metadata` was empty. Added `import app.models`; the
+  script now emits all 12 entities with 20 FK edges, PK/FK markers, and nullability.
+  Corrected the Makefile's `docs-erd` comment, which claimed the ERD is rendered "from
+  the live database" — it reads SQLAlchemy metadata, never queries Postgres.
+  `docs/drift.md` row 68.
+
 ### Changed
+- TS-08 (D-02, D-06): verified all four `make docs` targets — `docs:api` and
+  `docs:uml` already correct, `docs:tests` (previously unverified) now confirmed
+  passing: 217 tests, 93% coverage. Regenerated and committed `docs/generated/`
+  (OpenAPI spec, ERD, class diagram, test report + coverage) against current `dev`.
+  SDS/RS reconciliation (D-03/D-04/D-05) deferred — the submitted `.docx` files
+  aren't present in this repo or filesystem; see `docs/stories/TS-08-summary.md`.
 - TS-07 (Slice 1): replaced the single `APP_ENV=local|cloud` switch with four
   independent adapter settings — `RESUME_STORE`, `MAILER`, `CALENDAR_STORE`,
   `EMBEDDER` — each defaulting to today's local behaviour, so Drive/Gmail/Calendar

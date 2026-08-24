@@ -1,0 +1,171 @@
+@startuml classes_AutoHire
+set namespaceSeparator none
+class "AiAnalysisResult" as app.models.ai_analysis_result.AiAnalysisResult {
+  ai_feedback_summary : Mapped[str | None]
+  analysis_id : Mapped[uuid.UUID]
+  candidate_id : Mapped[uuid.UUID]
+  embedding : Mapped[list[float] | None]
+  evidence_snippets : Mapped[list[str] | None]
+  job_id : Mapped[uuid.UUID]
+  matched_skills : Mapped[list[str] | None]
+  missing_skills : Mapped[list[str] | None]
+  processed_at : Mapped[datetime]
+  rank_position : Mapped[int]
+  semantic_score : Mapped[float]
+  vector_id : Mapped[str | None]
+}
+class "ApiName" as app.models.api_usage_log.ApiName {
+  name
+}
+class "ApiUsageLog" as app.models.api_usage_log.ApiUsageLog {
+  api_name : Mapped[ApiName]
+  call_count : Mapped[int]
+  log_id : Mapped[uuid.UUID]
+  recorded_at : Mapped[datetime]
+  recruiter_id : Mapped[uuid.UUID | None]
+  tokens_used : Mapped[int | None]
+}
+class "BackgroundTask" as app.models.background_task.BackgroundTask {
+  candidate_id : Mapped[uuid.UUID | None]
+  celery_task_id : Mapped[str | None]
+  completed_at : Mapped[datetime | None]
+  error_message : Mapped[str | None]
+  job_id : Mapped[uuid.UUID | None]
+  recruiter_id : Mapped[uuid.UUID]
+  result_summary : Mapped[dict | None]
+  started_at : Mapped[datetime]
+  status : Mapped[TaskStatus]
+  task_id : Mapped[uuid.UUID]
+  task_type : Mapped[TaskType]
+}
+class "Candidate" as app.models.candidate.Candidate {
+  candidate_id : Mapped[uuid.UUID]
+  deleted_at : Mapped[datetime | None]
+  email : Mapped[str]
+  form_responses : Mapped[list['CandidateFormResponse']]
+  full_name : Mapped[str]
+  job_id : Mapped[uuid.UUID]
+  parse_error : Mapped[str | None]
+  phone_number : Mapped[str | None]
+  resume_drive_file_id : Mapped[str | None]
+  resume_drive_url : Mapped[str | None]
+  resume_storage_key : Mapped[str | None]
+  resume_text : Mapped[str | None]
+  submission_status : Mapped[SubmissionStatus]
+  submitted_at : Mapped[datetime]
+}
+class "CandidateFormResponse" as app.models.candidate.CandidateFormResponse {
+  candidate_id : Mapped[uuid.UUID]
+  field_id : Mapped[uuid.UUID]
+  response_id : Mapped[uuid.UUID]
+  response_value : Mapped[str | None]
+}
+class "EmailLog" as app.models.email_log.EmailLog {
+  body_preview : Mapped[str | None]
+  candidate_id : Mapped[uuid.UUID]
+  delivery_status : Mapped[DeliveryStatus]
+  email_id : Mapped[uuid.UUID]
+  email_type : Mapped[EmailType]
+  gmail_message_id : Mapped[str | None]
+  gmail_thread_id : Mapped[str | None]
+  idempotency_key : Mapped[str]
+  is_automated : Mapped[bool]
+  recruiter_id : Mapped[uuid.UUID]
+  sent_at : Mapped[datetime]
+  slot_id : Mapped[uuid.UUID | None]
+  subject : Mapped[str]
+}
+class "<color:red>EmptyFile</color>" as app.services.resume_validation.EmptyFile {
+}
+class "<color:red>ExtractionFailed</color>" as app.services.resume_parser.ExtractionFailed {
+}
+class "<color:red>FileTooLarge</color>" as app.services.resume_validation.FileTooLarge {
+}
+class "FormTemplate" as app.models.template.FormTemplate {
+  created_at : Mapped[datetime]
+  deleted_at : Mapped[datetime | None]
+  fields : Mapped[list['TemplateField']]
+  recruiter_id : Mapped[uuid.UUID]
+  template_id : Mapped[uuid.UUID]
+  template_name : Mapped[str]
+  updated_at : Mapped[datetime]
+}
+class "InterviewSlot" as app.models.interview.InterviewSlot {
+  candidate_id : Mapped[uuid.UUID]
+  candidate_reply_text : Mapped[str | None]
+  created_at : Mapped[datetime]
+  duration_minutes : Mapped[int]
+  google_calendar_event_id : Mapped[str | None]
+  google_meet_link : Mapped[str | None]
+  job_id : Mapped[uuid.UUID]
+  recruiter_id : Mapped[uuid.UUID]
+  reschedule_reason : Mapped[str | None]
+  scheduled_at : Mapped[datetime]
+  slot_id : Mapped[uuid.UUID]
+  status : Mapped[SlotStatus]
+  updated_at : Mapped[datetime]
+}
+class "JobPosting" as app.models.job.JobPosting {
+  apply_slug : Mapped[str]
+  created_at : Mapped[datetime]
+  deleted_at : Mapped[datetime | None]
+  expires_at : Mapped[datetime]
+  google_drive_folder_id : Mapped[str | None]
+  is_accepting_responses : Mapped[bool]
+  jd_embedding_id : Mapped[str | None]
+  job_description : Mapped[str]
+  job_id : Mapped[uuid.UUID]
+  job_title : Mapped[str]
+  recruiter_id : Mapped[uuid.UUID]
+  status : Mapped[JobStatus]
+  template : Mapped[FormTemplate]
+  template_id : Mapped[uuid.UUID]
+  updated_at : Mapped[datetime]
+}
+class "Recruiter" as app.models.recruiter.Recruiter {
+  account_state : Mapped[RecruiterState]
+  created_at : Mapped[datetime]
+  email : Mapped[str]
+  full_name : Mapped[str]
+  google_access_token : Mapped[str]
+  google_refresh_token : Mapped[str | None]
+  google_token_expires_at : Mapped[datetime]
+  google_user_id : Mapped[str]
+  granted_scopes : Mapped[list[str]]
+  last_login_at : Mapped[datetime | None]
+  profile_picture_url : Mapped[str | None]
+  recruiter_id : Mapped[uuid.UUID]
+}
+class "RecruiterState" as app.models.recruiter.RecruiterState {
+  name
+}
+class "SchedulingPreference" as app.models.scheduling.SchedulingPreference {
+  available_days : Mapped[list[str]]
+  available_end_time : Mapped[time]
+  available_start_time : Mapped[time]
+  created_at : Mapped[datetime]
+  last_synced_at : Mapped[datetime | None]
+  preference_id : Mapped[uuid.UUID]
+  recruiter_id : Mapped[uuid.UUID]
+  slot_duration_minutes : Mapped[int]
+  timezone : Mapped[str]
+  updated_at : Mapped[datetime]
+}
+class "TemplateField" as app.models.template.TemplateField {
+  field_id : Mapped[uuid.UUID]
+  field_label : Mapped[str]
+  field_order : Mapped[int]
+  field_type : Mapped[FieldType]
+  is_required : Mapped[bool]
+  options : Mapped[list[str] | None]
+  template : Mapped[FormTemplate]
+  template_id : Mapped[uuid.UUID]
+}
+class "<color:red>UnsupportedFileType</color>" as app.services.resume_validation.UnsupportedFileType {
+}
+class "_IdentityAnswers" as app.services.candidate_service._IdentityAnswers {
+  email : Annotated, EmailStr
+  full_name : Optional[str]
+  model_config : ConfigDict
+}
+@enduml
