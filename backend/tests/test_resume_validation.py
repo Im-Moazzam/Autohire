@@ -15,8 +15,10 @@ def test_sniffs_pdf() -> None:
     assert sniff_extension(b"%PDF-1.4 rest of file") == "pdf"
 
 
-def test_sniffs_doc_ole_header() -> None:
-    assert sniff_extension(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1junk") == "doc"
+def test_doc_ole_header_is_unsupported() -> None:
+    # .doc is recognised (OLE2 magic) but deliberately rejected — extract_text
+    # has no handler for it (TS-06/R-03).
+    assert sniff_extension(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1junk") is None
 
 
 def test_renamed_exe_matches_nothing() -> None:

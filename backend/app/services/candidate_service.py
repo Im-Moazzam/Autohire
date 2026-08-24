@@ -210,7 +210,7 @@ def submit_application(
             status_code=415,
             detail={
                 "code": "UNSUPPORTED_FILE_TYPE",
-                "message": "Only PDF, DOC, and DOCX resumes are accepted.",
+                "message": "Only PDF and DOCX resumes are accepted.",
             },
         )
 

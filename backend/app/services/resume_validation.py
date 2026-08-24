@@ -82,11 +82,13 @@ def sniff_extension(content: bytes) -> str | None:
     """Returns the validated extension for `content`'s magic bytes, or None
     if nothing matches. The declared filename and Content-Type are never
     consulted — a `.exe` renamed to `.pdf` presents `MZ` and matches nothing
-    here (TC-05)."""
+    here (TC-05).
+
+    `.doc` (OLE2) is recognised by `_OLE_MAGIC` but deliberately rejected
+    (returns None, not "doc") — extract_text has no handler for it, so
+    accepting it here only produced a silent PARSE_ERROR later (TS-06/R-03)."""
     if content.startswith(_PDF_MAGIC):
         return "pdf"
-    if content.startswith(_OLE_MAGIC):
-        return "doc"
     if content.startswith(_ZIP_MAGIC):
         return "docx" if _is_docx(content) else None
     return None

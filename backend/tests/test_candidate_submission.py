@@ -220,6 +220,28 @@ def test_exe_renamed_to_pdf_is_415_nothing_written(
     assert db_session.query(Candidate).count() == 0
 
 
+# TS-06/R-03: .doc (OLE2) was sniffed and accepted at upload, but
+# resume_parser.extract_text has no handler for it — every .doc candidate was
+# a silent PARSE_ERROR after the fact. Reject it at upload instead.
+def test_ole2_doc_upload_is_415_nothing_written(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    field_ids = _field_ids(template)
+
+    response = _submit(
+        job["apply_slug"],
+        field_ids,
+        filename="resume.doc",
+        content=b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"legacy word content",
+        content_type="application/msword",
+    )
+    assert response.status_code == 415
+    assert response.json()["code"] == "UNSUPPORTED_FILE_TYPE"
+    assert db_session.query(Candidate).count() == 0
+
+
 # TC-06
 def test_oversized_file_is_413_nothing_written(
     authed_client: TestClient, db_session: Session
