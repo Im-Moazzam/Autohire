@@ -11,18 +11,14 @@ import {
 import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
-import { useCreateJob, useJob, useUpdateJob } from "../lib/jobs";
+import {
+  dateToExpiresAt,
+  expiresAtToDateInput,
+  useCreateJob,
+  useJob,
+  useUpdateJob,
+} from "../lib/jobs";
 import { useTemplates } from "../lib/templates";
-
-/** Applications close at the end of the chosen day (23:59:59 local), so a
- * recruiter picking "today" doesn't accidentally close the job immediately. */
-function dateToExpiresAt(date: string): string {
-  return new Date(`${date}T23:59:59`).toISOString();
-}
-
-function expiresAtToDateInput(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 export function JobBuilder() {
   const { jobId } = useParams<{ jobId: string }>();

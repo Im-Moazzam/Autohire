@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_db
 from app.models.candidate import Candidate
 from app.models.recruiter import Recruiter
@@ -19,12 +18,6 @@ router = APIRouter(
     tags=["interviews"],
     dependencies=[Depends(get_current_recruiter)],
 )
-
-
-def _to_slot_out(slot: dict) -> InterviewSlotOut:
-    # STUB helper — only PATCH /interviews/{slot_id} (reschedule/cancel,
-    # Phase 2) still uses the fixture shape.
-    return InterviewSlotOut(**slot, candidate_name=fixtures.candidate_name(slot["candidate_id"]))
 
 
 @router.post(
@@ -88,19 +81,18 @@ def _candidate_names(db: Session, candidate_ids: list[uuid.UUID]) -> dict[uuid.U
 
 
 @router.patch(
-    "/{slot_id}", response_model=InterviewSlotOut, responses=error_responses(401, 404, 422)
+    "/{slot_id}",
+    response_model=InterviewSlotOut,
+    responses=error_responses(401, 404, 422, 501),
 )
 def update_interview(slot_id: uuid.UUID, payload: InterviewSlotUpdate) -> InterviewSlotOut:
-    # STUB: Phase 2 — cancel and reschedule are both PATCH.
-    slot = fixtures.INTERVIEW_SLOTS.get(slot_id)
-    if slot is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "SLOT_NOT_FOUND", "message": "Interview slot not found."},
-        )
-    updated = dict(slot)
-    if payload.status is not None:
-        updated["status"] = payload.status
-    if payload.scheduled_at is not None:
-        updated["scheduled_at"] = payload.scheduled_at
-    return _to_slot_out(updated)
+    # Genuinely Phase 2 (cancel/reschedule) — honest 501, not a fixture lookup
+    # that 404s on every real slot (TS-06/R-04).
+    del slot_id, payload
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "code": "NOT_IMPLEMENTED",
+            "message": "Rescheduling and cancelling interviews is Phase 2 and is not implemented.",
+        },
+    )

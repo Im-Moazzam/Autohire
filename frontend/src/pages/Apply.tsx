@@ -362,7 +362,7 @@ export function Apply() {
           label="Resume *"
           helperText="PDF, DOC, or DOCX, up to 5MB."
           errorText={resumeError}
-          accept=".pdf,.doc,.docx"
+          accept=".pdf,.docx"
           onChange={(e) => setResume(e.target.files?.[0] ?? null)}
         />
       </div>

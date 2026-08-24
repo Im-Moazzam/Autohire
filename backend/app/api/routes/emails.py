@@ -1,9 +1,8 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app.api import fixtures
 from app.api.deps import get_current_recruiter, get_db
 from app.models.recruiter import Recruiter
 from app.schemas.common import Page, PaginationParams, error_responses, pagination_params
@@ -23,13 +22,21 @@ router = APIRouter(
     "/send",
     response_model=TaskOut,
     status_code=status.HTTP_202_ACCEPTED,
-    responses=error_responses(401, 422),
+    responses=error_responses(401, 422, 501),
 )
 def send_email(payload: EmailSendIn) -> TaskOut:
-    # STUB: manual send is out of this story's scope — only the automatic
+    # Manual, ad hoc send is genuinely Phase 2 — only the automatic
     # INTERVIEW_INVITE dispatch (calendar_sync -> email_dispatch) is real.
+    # Honest 501, not a stale fixture TaskOut whose task_id 404s at
+    # GET /tasks/{id} (TS-06/R-04).
     del payload
-    return TaskOut(**fixtures.TASKS[fixtures.TASK_RUNNING_ID])
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail={
+            "code": "NOT_IMPLEMENTED",
+            "message": "Manual email send is Phase 2 and is not implemented.",
+        },
+    )
 
 
 @router.get("", response_model=Page[EmailLogOut], responses=error_responses(401))

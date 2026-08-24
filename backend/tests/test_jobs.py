@@ -85,6 +85,19 @@ def test_expires_at_in_past_is_422_no_row(authed_client: TestClient, db_session:
     assert db_session.query(JobPosting).count() == 0
 
 
+# TC-08 (TS-06/R-07): JobUpdate had no future-date validator, so a PATCH with
+# a past expires_at silently 200'd and left status LIVE while the public
+# endpoint immediately 410s.
+def test_patch_expires_at_in_past_is_422(authed_client: TestClient) -> None:
+    template = _create_template(authed_client)
+    job = authed_client.post("/api/v1/jobs", json=_job_payload(template["template_id"])).json()
+
+    response = authed_client.patch(
+        f"/api/v1/jobs/{job['job_id']}", json={"expires_at": "2020-01-01T00:00:00Z"}
+    )
+    assert response.status_code == 422
+
+
 # TC-03
 def test_create_job_with_other_recruiters_template_is_404(
     authed_client: TestClient, second_recruiter: Recruiter, db_session: Session

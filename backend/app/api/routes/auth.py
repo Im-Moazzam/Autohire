@@ -6,6 +6,7 @@ from app.adapters.google.oauth import build_auth_url, exchange_code, fetch_useri
 from app.api.deps import get_current_recruiter, get_db
 from app.core.config import settings
 from app.models.recruiter import Recruiter
+from app.schemas.common import error_responses
 from app.schemas.recruiter import RecruiterOut
 from app.services.auth_service import (
     SESSION_COOKIE,
@@ -84,7 +85,7 @@ def google_callback(
     return response
 
 
-@router.get("/me", response_model=RecruiterOut)
+@router.get("/me", response_model=RecruiterOut, responses=error_responses(401))
 def get_me(recruiter: Recruiter = Depends(get_current_recruiter)) -> Recruiter:
     return recruiter
 

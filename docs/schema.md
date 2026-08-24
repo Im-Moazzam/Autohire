@@ -330,7 +330,13 @@ UNIQUE key, not this index.
 full_name, reason}], horizon_days}` for a completed `CALENDAR_SYNC` task — "more
 candidates than available slots" must be reported explicitly, never silently
 dropped, and the shortfall is only known once the task runs, so it has to land
-somewhere the client polls. Nullable and additive: `RESUME_PARSE`/`BATCH_RANKING`
+somewhere the client polls. `reason` is one of `CANDIDATE_NOT_FOUND`,
+`NOT_RANKED`, `NO_SLOT_IN_HORIZON`, `CALENDAR_FAILED`, `ALREADY_SCHEDULED`
+(this candidate already has a live slot — `uq_interview_slots_candidate_live`),
+or `SLOT_TIME_TAKEN` (two different candidates collided on the exact same
+recruiter+instant — `uq_interview_slots_recruiter_time`; distinguished from
+`ALREADY_SCHEDULED` by inspecting the IntegrityError's constraint name,
+TS-06/R-10). Nullable and additive: `RESUME_PARSE`/`BATCH_RANKING`
 tasks leave it NULL, and `TaskOut` returns `null` for it on every other task type —
 this is a backward-compatible addition to a response model already shared by three
 enqueue flows, not a breaking change to any of them.

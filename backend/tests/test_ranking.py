@@ -128,6 +128,31 @@ def _mock_rank_delay():
     )
 
 
+# TS-06/R-11: an exception inside _run_batch_ranking (not a per-candidate
+# analyzer failure, which degrades to NULL skills and continues) must mark
+# the task FAILED and re-raise, mirroring resume_parse_job's equivalent path.
+def test_batch_ranking_exception_outside_loop_marks_task_failed(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    _add_candidate(db_session, job_id, "a@example.com", "python developer")
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    with (
+        patch("app.tasks.batch_ranking.get_embedder", side_effect=RuntimeError("model down")),
+        pytest.raises(RuntimeError),
+    ):
+        batch_ranking_job.run(str(task.task_id))
+
+    db_session.expire_all()
+    db_session.refresh(task)
+    assert task.status == TaskStatus.FAILED
+    assert task.error_message
+    assert task.completed_at is not None
+
+
 # --- TC-01 --------------------------------------------------------------------
 
 

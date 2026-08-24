@@ -82,6 +82,19 @@ def calendar_sync_job(self: Task, task_id: str, candidate_ids: list[str]) -> Non
         db.commit()
 
 
+def _unique_violation_reason(exc: IntegrityError) -> str:
+    """Two partial-unique indexes can raise IntegrityError here (TS-06/R-10):
+    uq_interview_slots_candidate_live (this candidate already has a live
+    slot) and uq_interview_slots_recruiter_time (two different candidates
+    collided on the exact same recruiter+instant). Inspect which one fired
+    rather than hard-coding a single reason — falls back to
+    ALREADY_SCHEDULED if the driver doesn't expose a constraint name."""
+    constraint_name = getattr(getattr(exc.orig, "diag", None), "constraint_name", None) or ""
+    if "recruiter_time" in constraint_name:
+        return "SLOT_TIME_TAKEN"
+    return "ALREADY_SCHEDULED"
+
+
 def _run_calendar_sync(db: Session, task: BackgroundTask, candidate_ids: list[uuid.UUID]) -> dict:
     assert task.job_id is not None
     job = db.get(JobPosting, task.job_id)
@@ -102,7 +115,11 @@ def _run_calendar_sync(db: Session, task: BackgroundTask, candidate_ids: list[uu
     candidates_by_id = {
         c.candidate_id: c
         for c in db.scalars(
-            select(Candidate).where(Candidate.candidate_id.in_(candidate_ids))
+            select(Candidate).where(
+                Candidate.candidate_id.in_(candidate_ids),
+                Candidate.job_id == job.job_id,
+                Candidate.deleted_at.is_(None),
+            )
         ).all()
     }
 
@@ -154,13 +171,13 @@ def _run_calendar_sync(db: Session, task: BackgroundTask, candidate_ids: list[uu
         db.add(slot)
         try:
             db.commit()
-        except IntegrityError:
+        except IntegrityError as exc:
             db.rollback()
             unscheduled.append(
                 {
                     "candidate_id": str(candidate_id),
                     "full_name": candidate.full_name,
-                    "reason": "ALREADY_SCHEDULED",
+                    "reason": _unique_violation_reason(exc),
                 }
             )
             continue

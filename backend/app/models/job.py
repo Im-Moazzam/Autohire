@@ -31,8 +31,6 @@ class JobPosting(Base):
     job_title: Mapped[str] = mapped_column(String(200), nullable=False)
     job_description: Mapped[str] = mapped_column(Text(), nullable=False)
     jd_embedding_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    google_form_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    google_form_url: Mapped[str | None] = mapped_column(Text(), nullable=True)
     google_drive_folder_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     apply_slug: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     status: Mapped[JobStatus] = mapped_column(
