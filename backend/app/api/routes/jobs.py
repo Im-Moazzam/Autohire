@@ -82,7 +82,7 @@ def list_jobs(
     "",
     response_model=JobDetailOut,
     status_code=status.HTTP_201_CREATED,
-    responses=error_responses(401, 404, 422, 502),
+    responses=error_responses(401, 404, 422, 500, 502),
 )
 def create_job(
     payload: JobCreate,
@@ -102,7 +102,9 @@ def get_job(
 
 
 @router.patch(
-    "/{job_id}", response_model=JobDetailOut, responses=error_responses(401, 404, 409, 422, 502)
+    "/{job_id}",
+    response_model=JobDetailOut,
+    responses=error_responses(401, 404, 409, 422, 500, 502),
 )
 def update_job(
     payload: JobUpdate,

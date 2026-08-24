@@ -19,3 +19,14 @@ def test_auth_me_declares_401(client: TestClient) -> None:
 
 def test_recruiters_me_patch_declares_401(client: TestClient) -> None:
     assert "401" in _declared_statuses(client, "/api/v1/recruiters/me", "patch")
+
+
+# TS-06/R-06: job_service.finalize_launch raises 500 RESUME_FOLDER_FAILED when
+# APP_ENV=local (the demo config) and 502 otherwise, but POST/PATCH /jobs only
+# declared 502.
+def test_jobs_post_declares_500(client: TestClient) -> None:
+    assert "500" in _declared_statuses(client, "/api/v1/jobs", "post")
+
+
+def test_jobs_patch_declares_500(client: TestClient) -> None:
+    assert "500" in _declared_statuses(client, "/api/v1/jobs/{job_id}", "patch")
