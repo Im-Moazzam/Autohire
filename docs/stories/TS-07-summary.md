@@ -184,21 +184,234 @@ to the caller-supplied fallback text.
 
 ---
 
-## Slices 2-5 — pending manual verification
+## Slice 2 — Drive for real
 
-Not started against real Google. Code-only fixes already landed in the Slice 1
-commit where they were low-risk and testable without live credentials:
+**Status:** Done. Verified manually against a real Google Drive, `RESUME_STORE=drive`.
 
-- **Slice 2:** `DriveResumeStore.store_resume`'s `json.dumps` hardening (see
-  above). The "Prove it" manual run (job folder created, resume uploaded into
-  it, `webViewLink` opens) has not been run.
-- **Slice 3:** no code changes — both open questions (`From` header behavior,
-  `gmail_message_id`/`gmail_thread_id` populated) are verify-only against a real
-  send, not implicated by anything Slice 1 touched.
-- **Slice 4:** `sendUpdates` decision recorded (above); the `starts_at`
-  timezone claim is unverified.
-- **Slice 5:** embedder decision recorded (above); no code to verify further.
+### A second bug found and fixed mid-verification: real filename lost in Drive
 
-This section will be filled in with real observed evidence — what was run, what
-was seen in the actual Google product, anything that behaved differently from
-the story's description — once that verification happens.
+Manual testing surfaced a UX gap the story didn't call out: `DriveResumeStore.store_resume`
+used the same server-generated `uuid4` name (TC-08's path-traversal guard) as both the
+storage key *and* Drive's visible file name, so every resume showed up in the recruiter's
+Drive as e.g. `f01eec61-895e-4aa6-9a11-f07e0d95dc69.pdf` — unreadable, no way to tell
+candidates apart by filename.
+
+**Fix:** `ResumeStore.store_resume` gained an optional `display_name` parameter
+(`backend/app/adapters/base.py`). `DriveResumeStore` uses it as Drive's `name` metadata
+field — cosmetic only, never a lookup key (Drive files are addressed by `drive_file_id`,
+never by name). `LocalResumeStore` accepts and ignores it — the local disk path must stay
+the server-generated uuid (TC-08 is a real filesystem containment guard there, not just
+display). `candidate_service.submit_application` computes the display name from
+`resume.filename` (the original upload), sanitized (`_drive_display_name`: strips control
+chars and path separators, caps at 150 chars, falls back to `resume` if empty) and
+re-suffixed with the *sniffed* extension, never the candidate-supplied one. The
+uuid4-based storage key — local path, Drive lookup, download response filename — is
+unchanged everywhere. Commit `70cf09e`.
+
+### Manual run
+
+Job `TS-07 Display Name Verification` (`job_id 1da05855-b3fe-4c5e-962c-07341eaea821`),
+`RESUME_STORE=drive`. Applied through the actual `/apply/{slug}` form in a real browser
+(not a direct API call) with a PDF named `Moazzam_Aleem_Resume.pdf`.
+
+- **Folder created:** `TS-07 Display Name Verification` appeared at Drive root
+  (`folder_id 1cfKEFsySKesLzJF51mkW_MTyACFN36nQ`), immediately on job launch — confirmed
+  by opening Drive directly, not inferred from the API.
+- **File landed inside that folder**, not at Drive root — confirmed by navigating into
+  the folder and seeing exactly one file.
+- **Display name fix confirmed live:** the file is named `Moazzam_Aleem_Resume.pdf` in
+  Drive — the candidate's real filename, not a uuid.
+- **`GET /jobs/{id}/candidates`:** `resume_url` populated with a real, working
+  `drive.google.com/file/d/…/view` link; nothing candidate-supplied leaks into it.
+- **`resume_url` opens correctly:** clicked through from the API response, the PDF
+  rendered in Google's viewer, tab title confirmed `Moazzam_Aleem_Resume.pdf`.
+
+### AC status
+
+- [x] Job folder created, resume uploaded into it, link opens — evidence above
+- [x] `webViewLink` (`resume_url`) openable by the owning recruiter
+
+---
+
+## Slice 3 — Gmail for real
+
+**Status:** Done. Verified manually against real Gmail, `MAILER=gmail` (`RESUME_STORE`
+stayed `drive`; `CALENDAR_STORE` stayed `local` for this slice — one variable at a time,
+per the story's own rule).
+
+### A testing near-miss worth recording: an undersized fixture PDF
+
+Applying with a synthetic test PDF hit `PARSE_ERROR: no selectable text found` —
+looked like an app bug at first. Root cause: `resume_parser.py`'s `MIN_CHARS = 50` floor
+(the scanned/image-only guard) rejected the extracted text because it was exactly 49
+characters — a bug in the throwaway fixture, not the app. Fixed by patching the same
+Drive file's content in place (`files.update?uploadType=media`) with longer text and
+re-running `/process`, which correctly picked the `PARSE_ERROR` candidate back up and
+re-parsed it clean. This incidentally proved the story's SUBMITTED/PARSE_ERROR retry
+behavior against live Drive + `pypdf`, not just against local fixtures.
+
+### Manual run
+
+Reused the already-Drive-backed `TS-07 Drive Verification` job
+(`job_id 50d92739-4da8-4506-b1f0-dbb7aec000d2`) rather than launching a new one — the
+story's "use a brand-new job" caution is about jobs whose `google_drive_folder_id` is a
+stale filesystem path from before `RESUME_STORE=drive`; this job's folder was already a
+real Drive folder, so reuse was safe. Applied as `moazzamaleem786@gmail.com` (a second,
+real Gmail account the user controls). Closed the job, ran `/process` → `PARSED`,
+`/rank` → `RANKED`.
+
+**Scheduling preferences set for real**, not defaulted: `PUT /scheduling/preferences`
+with `available_days: [MON..FRI]`, `09:00–17:00`, `slot_duration_minutes: 30` — 200,
+persisted (`preference_id` returned). Confirms the recruiter-configurable-hours AC
+(US-24) is real and working end-to-end even though the frontend has no Scheduling page
+yet to drive it from (see *Known gaps*, below) — this was called via the API directly.
+
+`POST /interviews` → `CALENDAR_SYNC` task (still `CALENDAR_STORE=local` here, so
+`google_meet_link` correctly came back as a `meet.local.test` stub — expected, Slice 4
+not yet flipped).
+
+**Email:**
+```
+GET /emails
+  delivery_status: "SENT"
+  gmail_message_id: "1a035593aacde2e3"   (confirmed directly on the EmailLog row,
+                                           not just the summary list response)
+```
+Worker log confirms a real API call, not a mock: `POST
+https://gmail.googleapis.com/gmail/v1/users/me/messages/send "HTTP/1.1 200 OK"`.
+The user independently confirmed the invitation actually arrived in
+`moazzamaleem786@gmail.com`'s inbox "as expected."
+
+**Idempotency — first attempt was itself a bug, corrected:** `email_dispatch_job.run()`
+takes a `slot_id`, not an `email_id`; the first idempotency check accidentally passed the
+email log's id, which made `db.get(InterviewSlot, slot_id)` return `None` and the task
+no-op silently — "no error" was not evidence of dedupe working, it was evidence of
+nothing running. Caught before writing it up, re-ran with the correct `slot_id`
+(`0faf399c-fc47-4058-91d6-ba8f54da93ad`): `email_logs` row count stayed at exactly 1,
+same `email_id`/`sent_at` before and after — the `idempotency_key` UNIQUE constraint's
+`IntegrityError` → rollback → no-op path (documented in `email_dispatch.py`'s own
+docstring) is confirmed working against the real send, not just against a mock.
+
+### Open question resolved
+
+- **`From` header:** not independently inspected (would need the raw message headers in
+  the recipient's client); the user's own inbox check confirms delivery and sender
+  identity read as expected. Gmail's API sends as the authenticated user regardless of
+  the `message["From"]` value set in code, per Google's documented behavior — consistent
+  with what arrived.
+
+### AC status
+
+- [x] Invitation delivered, `gmail_message_id` non-null — evidence above
+- [x] Redelivery deduplicated by `idempotency_key` — evidence above (corrected re-run)
+
+---
+
+## Slice 4 — Calendar for real
+
+**Status:** Done. Verified manually against a real Google Calendar,
+`CALENDAR_STORE=google` (`RESUME_STORE` stayed `drive`, `MAILER` stayed `gmail`).
+
+### Manual run
+
+New job `TS-07 Calendar Verification` (`job_id b94751dc-53c8-4ba5-8b97-2e903c51c5f5`).
+Applied with the real fixture resume `backend/tests/fixtures/resumes/Moazzam_Resume.pdf`
+(269 KB, real content — no `MIN_CHARS` surprises this time) as `moazzamaleem786@gmail.com`.
+Closed → `/process` → `PARSED` on the first attempt → `/rank` → `RANKED`.
+`POST /interviews` → `CALENDAR_SYNC` task:
+
+```
+GET /interviews
+  scheduled_at:      "2026-08-25T04:30:00Z"
+  google_meet_link:  "https://meet.google.com/dyz-vbhv-gnw"
+```
+
+Worker log: real API call, not a mock — `POST
+https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1
+"HTTP/1.1 200 OK"`.
+
+**Verified directly in Google Calendar**, not inferred from the API response. With the
+user's explicit go-ahead, the recruiter's Google Calendar primary time zone was changed
+from UTC to `(GMT+05:00) Pakistan Standard Time` (matching `SCHEDULING_TIMEZONE=Asia/Karachi`)
+to make the comparison meaningful. The event appeared as:
+
+> **Interview: Moazzam Aleem — TS-07 Calendar Verification**
+> Tuesday, August 25 · **9:30 – 10:00am**
+> Join with Google Meet: `meet.google.com/dyz-vbhv-gnw`
+> 1 guest · 1 awaiting
+
+`04:30Z + 5h = 09:30` local — exact match. This resolves the story's open question about
+`starts_at.isoformat()` being passed without an explicit `timeZone` field: the UTC offset
+embedded in the ISO string is read correctly by Google, no timezone bug. The Meet link in
+the calendar event matches the API's `google_meet_link` exactly, and is real and clickable
+(not a `meet.local.test` stub). "1 guest, 1 awaiting" confirms the candidate was actually
+added as an attendee on the real event, not just referenced in a log row.
+
+**`sendUpdates` decision (drift row 67) confirmed consistent in practice:** Google did not
+send its own calendar-invite email for this event (`sendUpdates` still unset/`none`) —
+AutoHire's own Gmail `INTERVIEW_INVITE` (Slice 3) remains the single tracked invitation
+channel, as decided.
+
+### AC status
+
+- [x] Event on the recruiter's calendar at the correct Asia/Karachi local time — evidence
+      above
+- [x] Real, joinable Meet link — evidence above
+
+---
+
+## Slice 5 — Embedder
+
+**Status:** Decision recorded in Slice 1 (kept `fastembed` only, drift row 66); no
+further verification needed — no code path changed.
+
+---
+
+## Known gaps, not fixed here
+
+- **No frontend UI for Scheduling, Candidates, or Emails yet** (`frontend/src/router.tsx`
+  only has Dashboard, Templates, Jobs, and the public Apply page). All of Slices 3-4's
+  scheduling-preferences, ranking, and interview calls were driven directly against the
+  API from an authenticated browser session, not through a recruiter-facing page — because
+  that page doesn't exist. This is a pre-existing scope gap (that UI belongs to
+  US-13/US-24/US-26), not something TS-07 introduced or was supposed to close; called out
+  here so the "manual verification" evidence above is understood as API-level, not
+  UI-level, proof.
+- **`Candidate` has no column for the original resume filename** — Slice 2's fix shows
+  the real filename in Drive, but the recruiter UI (once built) has nowhere to display it
+  either, since it isn't persisted anywhere in the DB. Revisit if/when the UI needs it.
+- **`web` (frontend) docker-compose service doesn't mount `./docs`**, unlike `api`/
+  `worker` — `identityFields.test.ts`'s import of `../../../docs/identity-fields-cases.json`
+  fails inside that container (works fine run from the host, which is how it must have
+  been run for Slice 1's reported "19 frontend tests"). Not touched this session; noted
+  since it will bite the next person who tries `docker compose exec web npx vitest run`.
+
+## Full-suite evidence (re-run after Slice 2's fix and all manual verification)
+
+Run with `RESUME_STORE=local MAILER=local CALENDAR_STORE=local` overrides on top of the
+live `.env` (which stayed on `drive`/`gmail`/`google` — the config used for the manual
+verification above) so the suite exercises local adapters and makes no real network call,
+per the story's rule 3:
+
+```
+$ docker compose exec -e RESUME_STORE=local -e MAILER=local -e CALENDAR_STORE=local \
+    api pytest -q
+217 passed, 2 warnings in 46.22s
+
+$ docker compose exec -e RESUME_STORE=local -e MAILER=local -e CALENDAR_STORE=local \
+    api pytest --cov=app/services --cov-report=term-missing --cov-fail-under=70 -q
+TOTAL  741  47  94%
+Required test coverage of 70% reached. Total coverage: 93.66%
+217 passed, 2 warnings in 79.59s
+
+$ docker compose exec api ruff check app
+All checks passed!
+
+$ docker compose exec api mypy --config-file pyproject.toml app
+Success: no issues found in 77 source files
+```
+
+Same 217/217 as Slice 1's commit — the `display_name` addition (Slice 2's fix) changed
+nothing structurally, only added an optional parameter. Frontend untouched this session,
+not re-run (see *Known gaps* above for why `docker compose exec web` specifically would
+have failed regardless).
