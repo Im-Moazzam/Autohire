@@ -20,6 +20,7 @@ storage/
 .mise.local.toml
 e2e/test-results/
 e2e/playwright-report/
+e2e/.auth/
 credentials.json
 token.json
 *.pem
