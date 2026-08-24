@@ -8,6 +8,10 @@ export type Recruiter = components["schemas"]["RecruiterOut"];
  * consent -> callback), not an API call, so it must not go through fetch(). */
 export const googleLoginUrl = `${API_URL}/auth/google/login`;
 
+/** Same reasoning as googleLoginUrl — restarts consent and replaces the
+ * stored tokens (US-03/TS-07). Linked from AppShell's REAUTH_REQUIRED banner. */
+export const googleReconnectUrl = `${API_URL}/auth/google/reconnect`;
+
 export function useCurrentRecruiter() {
   return useQuery<Recruiter | null>({
     queryKey: ["auth", "me"],

@@ -178,7 +178,7 @@ def finalize_launch(
             # error is our own server's problem (500) — not the same failure.
             status_code = (
                 status.HTTP_500_INTERNAL_SERVER_ERROR
-                if settings.app_env == "local"
+                if settings.resume_store == "local"
                 else status.HTTP_502_BAD_GATEWAY
             )
             raise HTTPException(

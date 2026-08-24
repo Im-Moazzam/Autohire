@@ -1,4 +1,5 @@
-export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
+export const API_URL =
+  import.meta.env.VITE_API_URL ?? "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
   status: number;
@@ -62,9 +63,19 @@ export const api = {
  * 422s (main.py's validation_exception_handler normalizes those too). Falls
  * back to a generic message for anything that isn't an ApiError at all
  * (a network failure never reaches the backend, so it has no ErrorOut body). */
-export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Try again."): string {
+export function apiErrorMessage(
+  err: unknown,
+  fallback = "Something went wrong. Try again.",
+): string {
   if (err instanceof ApiError) {
-    const body = err.body as { message?: string } | null;
+    const body = err.body as { code?: string; message?: string } | null;
+    // A request in flight when a Google refresh token expires (TS-07) gets a
+    // 409 here — point at the reconnect banner instead of a generic message,
+    // since the raw "Google authorization has expired" reads like a one-off
+    // failure rather than the persistent state AppShell's banner already shows.
+    if (body?.code === "REAUTH_REQUIRED") {
+      return "Google authorization has expired. Reconnect from the banner above to continue.";
+    }
     if (body?.message) return body.message;
   }
   return fallback;

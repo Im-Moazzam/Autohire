@@ -90,7 +90,7 @@ class _IdentityAnswers(BaseModel):
 def _storage_failure_status_code() -> int:
     # Same local-vs-cloud distinction as job_service.finalize_launch: our own
     # filesystem failing is a 500, an upstream Drive failure is a 502.
-    return 500 if settings.app_env == "local" else 502
+    return 500 if settings.resume_store == "local" else 502
 
 
 def _unknown_field(field_key: str) -> HTTPException:
@@ -228,12 +228,13 @@ def submit_application(
             detail={"code": "RESUME_UPLOAD_FAILED", "message": "Could not store the resume."},
         ) from exc
 
-    is_local = settings.app_env == "local"
     candidate = Candidate(
         job_id=job.job_id,
         full_name=identity.full_name,
         email=identity.email,
-        resume_storage_key=stored.storage_key if is_local else None,
+        # Adapter-agnostic: a Drive upload returns a drive_file_id, a local
+        # write doesn't — that distinguishes the store, not settings.app_env.
+        resume_storage_key=stored.storage_key if stored.drive_file_id is None else None,
         resume_drive_file_id=stored.drive_file_id,
         resume_drive_url=stored.drive_url,
     )
@@ -319,23 +320,22 @@ def form_responses(db: Session, candidate_id: uuid.UUID) -> list[FormResponseOut
 
 
 def resume_url_for(candidate: Candidate) -> str | None:
-    """Computed, never a column (docs/schema.md). Local mode never exposes the
-    filesystem path — it points at the authenticated download route instead;
-    cloud mode is the Drive webViewLink. Opaque to the client either way."""
-    if settings.app_env == "local":
-        if not candidate.resume_storage_key:
-            return None
+    """Computed, never a column (docs/schema.md). Branches on the candidate's
+    own stored fields, not settings.resume_store — a local write never sets
+    resume_drive_url, a Drive upload never sets resume_storage_key (TS-07)."""
+    if candidate.resume_storage_key:
         return f"/api/v1/candidates/{candidate.candidate_id}/resume"
     return candidate.resume_drive_url
 
 
 def resolve_resume_path(candidate: Candidate) -> Path | None:
-    """Resolves resume_storage_key for streaming. Local mode only — in cloud
-    mode resume_storage_key is always None (candidate_service.submit_application
-    only sets it when app_env == "local"), so this always returns None there and
-    the route 404s, matching resume_url_for's local-only route. Returns None
-    (never raises) for: no key stored, file missing, or the resolved path
-    escaping the job's folder — the route maps all three to 404 uniformly."""
+    """Resolves resume_storage_key for streaming. Only ever set for a local
+    write (candidate_service.submit_application only populates it when the
+    store's StoredFile has no drive_file_id, TS-07), so a Drive-backed
+    candidate always returns None here and the route 404s, matching
+    resume_url_for's local-only route. Returns None (never raises) for: no
+    key stored, file missing, or the resolved path escaping the job's
+    folder — the route maps all three to 404 uniformly."""
     if not candidate.resume_storage_key:
         return None
     folder = local_job_folder(candidate.job_id).resolve()

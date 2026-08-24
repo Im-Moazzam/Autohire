@@ -1,3 +1,4 @@
+import json
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -80,9 +81,7 @@ class DriveResumeStore:
         ext = filename.rsplit(".", 1)[-1].lower()
         mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
         boundary = uuid.uuid4().hex
-        metadata = (
-            f'{{"name": "{filename}", "parents": ["{job.google_drive_folder_id}"]}}'
-        ).encode()
+        metadata = json.dumps({"name": filename, "parents": [job.google_drive_folder_id]}).encode()
         body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n").encode()
         body += metadata
         body += f"\r\n--{boundary}\r\nContent-Type: {mime}\r\n\r\n".encode()
@@ -115,6 +114,6 @@ class DriveResumeStore:
 
 
 def get_resume_store() -> ResumeStore:
-    if settings.app_env == "local":
+    if settings.resume_store == "local":
         return LocalResumeStore()
     return DriveResumeStore()

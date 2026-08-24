@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Changed
+- TS-07 (Slice 1): replaced the single `APP_ENV=local|cloud` switch with four
+  independent adapter settings — `RESUME_STORE`, `MAILER`, `CALENDAR_STORE`,
+  `EMBEDDER` — each defaulting to today's local behaviour, so Drive/Gmail/Calendar
+  can now be cut over one at a time per ADR-003's staged order instead of all at
+  once. `APP_ENV` keeps exactly one job, the session cookie's `Secure` flag; zero
+  `settings.app_env` references remain in `app/services/`. `candidate_service` and
+  `job_service` branch on the returned `StoredFile` (`drive_file_id is None`) or on
+  the relevant adapter setting instead of the environment. Hardened
+  `DriveResumeStore.store_resume`'s multipart metadata to `json.dumps` instead of
+  f-string interpolation. Deleted `fixtures.resume_url_for` (zero callers, verified
+  by grep). Added a `REAUTH_REQUIRED` reconnect banner (`AppShell`, driven by
+  `account_state`, already fetched on every authenticated page — not a new
+  `http.ts` interceptor, since the failure can originate inside a Celery task with
+  no request in flight) plus an error-message mapping in `apiErrorMessage` so an
+  in-flight request's 409 points at the banner instead of reading like a generic
+  failure. `api.d.ts`/`docs/openapi.json` unchanged — no route touched. Embedder
+  decision: kept `fastembed` only (drift row 66); `sendUpdates` decision: left
+  unset so AutoHire's own Gmail invite stays the single tracked email (drift row
+  67). Slices 2-5's manual-verification items against real Google accounts are
+  not yet run; see `docs/stories/TS-07-summary.md` once they are.
+
 ### Fixed
 - TS-06: post-review remediation — 13 items from an external review
   (2026-08-23) that ran the migrations on a virgin database, executed the

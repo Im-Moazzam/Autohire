@@ -388,11 +388,9 @@ def test_cloud_mode_uploads_via_google_call_and_logs_once(
         request=httpx.Request("POST", "https://example.com"),
     )
 
-    # candidate_service reads settings.app_env directly (same local/cloud
-    # branch job_service.finalize_launch uses) to decide which column to
-    # populate — overriding just the store dependency isn't enough.
-    original_env = settings.app_env
-    settings.app_env = "cloud"
+    # TS-07: candidate_service now branches on the returned StoredFile
+    # (drive_file_id is None or not), not settings — overriding the store
+    # dependency is sufficient on its own.
     app.dependency_overrides[get_resume_store] = lambda: DriveResumeStore()
     try:
         with patch(
@@ -401,7 +399,6 @@ def test_cloud_mode_uploads_via_google_call_and_logs_once(
             response = _submit(job["apply_slug"], field_ids)
     finally:
         app.dependency_overrides.pop(get_resume_store, None)
-        settings.app_env = original_env
 
     assert response.status_code == 201, response.text
     assert mock_request.call_count == 1
