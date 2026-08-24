@@ -31,21 +31,21 @@ the register is dead** and you always have something demoable.
 
 | Story | Title | Backend | Frontend | Status |
 |---|---|---|---|---|
-| US-01 | Google OAuth sign-up with scope capture | Moazzam | Saif | Todo |
-| US-02 | Login, session, profile | Moazzam | Saif | Todo |
-| US-03 | Permission recovery / reconnect | Moazzam | Saif | Todo |
-| US-04 | Create application template | Moazzam | Saif | Todo |
-| US-06 | Launch job — JD, TTL, Drive folder, apply link | Moazzam | Saif | Todo |
-| US-11 | Candidate opens application link | Moazzam | Saif | Todo |
-| US-12 | Candidate submits application + resume | Moazzam | Saif | Todo |
-| US-13 | Recruiter views raw submissions | Moazzam | Saif | Todo |
-| US-15 | Trigger AI processing | Moazzam | Saif | Todo |
-| US-16 | Resume text extraction + parse errors | Moazzam | Saif | Todo |
-| US-18 | Embeddings + semantic scoring | Moazzam | Saif | Todo |
-| US-19 | Ranked shortlist | Moazzam | Saif | Todo |
-| US-24 | Availability windows | Moazzam | Saif | Todo |
-| US-26 | Auto-schedule interviews | Moazzam | Saif | Todo |
-| US-27 | Interview invitation email | Moazzam | Saif | Todo |
+| US-01 | Google OAuth sign-up with scope capture | Moazzam | Saif | Done |
+| US-02 | Login, session, profile | Moazzam | Saif | Done |
+| US-03 | Permission recovery / reconnect | Moazzam | Saif | Done |
+| US-04 | Create application template | Moazzam | Saif | Done |
+| US-06 | Launch job — JD, TTL, Drive folder, apply link | Moazzam | Saif | Done |
+| US-11 | Candidate opens application link | Moazzam | Saif | Done |
+| US-12 | Candidate submits application + resume | Moazzam | Saif | Done |
+| US-13 | Recruiter views raw submissions | Moazzam | Saif | Done |
+| US-15 | Trigger AI processing | Moazzam | Saif | Done |
+| US-16 | Resume text extraction + parse errors | Moazzam | Saif | Done |
+| US-18 | Embeddings + semantic scoring | Moazzam | Saif | Done |
+| US-19 | Ranked shortlist | Moazzam | Saif | Done |
+| US-24 | Availability windows | Moazzam | Saif | Done |
+| US-26 | Auto-schedule interviews | Moazzam | Saif | Done (backend). Frontend not started |
+| US-27 | Interview invitation email | Moazzam | Saif | Done (backend). Frontend not started |
 
 Build US-03 in Phase 1 even though it feels like polish. Testing-mode tokens expire
 weekly (ADR-002), so you will need it constantly from week two onward.
