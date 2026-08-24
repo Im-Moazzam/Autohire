@@ -23,6 +23,16 @@
   unset so AutoHire's own Gmail invite stays the single tracked email (drift row
   67). Slices 2-5's manual-verification items against real Google accounts are
   not yet run; see `docs/stories/TS-07-summary.md` once they are.
+- TS-07 (Slice 2 prep): `ResumeStore.store_resume` gained an optional
+  `display_name` parameter so `DriveResumeStore` can set the uploaded file's
+  Drive-visible name to the candidate's actual resume filename (sanitized),
+  while the server-generated uuid4 name (TC-08's path-traversal/overwrite
+  guard) stays the actual storage key everywhere — local disk path, Drive
+  lookup by `drive_file_id`, and the download response's filename are all
+  unchanged. `display_name` is metadata-only for Drive, never a lookup key.
+  Follow-up not done here: `Candidate` has no column for the original
+  filename, so it isn't shown anywhere in the recruiter UI yet — only in
+  Drive. Revisit if the UI needs it too.
 
 ### Fixed
 - TS-06: post-review remediation — 13 items from an external review

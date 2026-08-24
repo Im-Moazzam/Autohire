@@ -1,3 +1,4 @@
+import re
 import uuid
 from pathlib import Path
 
@@ -23,6 +24,17 @@ from app.services.identity_fields import resolve_identity_fields
 from app.services.resume_validation import EmptyFile, FileTooLarge, read_capped, sniff_extension
 
 _MAX_RESPONSE_LEN = 5000
+
+
+def _drive_display_name(original_filename: str | None, extension: str) -> str:
+    # Cosmetic only (Drive's "name" field, never a filesystem path or lookup
+    # key — see DriveResumeStore.store_resume) — sanitizing is defence in
+    # depth against control chars/path separators showing up in Drive UI,
+    # not a security boundary the way the local storage key is.
+    stem = Path(original_filename or "").stem.strip()
+    stem = re.sub(r'[\x00-\x1f/\\:*?"<>|]', "_", stem)[:150].strip()
+    return f"{stem or 'resume'}.{extension}"
+
 
 # Legal transition graph, closing docs/drift.md row 38. Mirrors
 # job_service._LEGAL_TRANSITIONS. PARSED is never re-parsed — the retry AC
@@ -220,8 +232,9 @@ def submit_application(
     # Server-generated name only — the candidate's raw filename never reaches
     # the filesystem or Drive (TC-08: path traversal / overwrite protection).
     stored_filename = f"{uuid.uuid4()}.{extension}"
+    display_name = _drive_display_name(resume.filename, extension)
     try:
-        stored = store.store_resume(recruiter, job, stored_filename, content)
+        stored = store.store_resume(recruiter, job, stored_filename, content, display_name)
     except Exception as exc:
         raise HTTPException(
             status_code=_storage_failure_status_code(),

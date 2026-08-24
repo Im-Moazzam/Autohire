@@ -35,8 +35,16 @@ class LocalResumeStore:
         return str(path)
 
     def store_resume(
-        self, recruiter: Recruiter, job: JobPosting, filename: str, content: bytes
+        self,
+        recruiter: Recruiter,
+        job: JobPosting,
+        filename: str,
+        content: bytes,
+        display_name: str | None = None,
     ) -> StoredFile:
+        # display_name is Drive-only (a human-readable label on file
+        # metadata); local storage has no such field, the path itself
+        # must stay the server-generated name (TC-08).
         folder = local_job_folder(job.job_id)
         folder.mkdir(parents=True, exist_ok=True)
         target = (folder / filename).resolve()
@@ -73,7 +81,12 @@ class DriveResumeStore:
         return result
 
     def store_resume(
-        self, recruiter: Recruiter, job: JobPosting, filename: str, content: bytes
+        self,
+        recruiter: Recruiter,
+        job: JobPosting,
+        filename: str,
+        content: bytes,
+        display_name: str | None = None,
     ) -> StoredFile:
         # One multipart/related upload = one google_call = one api_usage_logs
         # row (TC-13) — a create-then-patch-media two-call approach would log
@@ -81,7 +94,14 @@ class DriveResumeStore:
         ext = filename.rsplit(".", 1)[-1].lower()
         mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
         boundary = uuid.uuid4().hex
-        metadata = json.dumps({"name": filename, "parents": [job.google_drive_folder_id]}).encode()
+        # Drive's "name" is display metadata only — never used to locate the
+        # file (that's drive_file_id) — so it's safe to show the candidate's
+        # real filename here even though the on-disk/local name must stay
+        # server-generated (TC-08). Falls back to the uuid name if none given.
+        drive_name = display_name or filename
+        metadata = json.dumps(
+            {"name": drive_name, "parents": [job.google_drive_folder_id]}
+        ).encode()
         body = (f"--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n").encode()
         body += metadata
         body += f"\r\n--{boundary}\r\nContent-Type: {mime}\r\n\r\n".encode()
