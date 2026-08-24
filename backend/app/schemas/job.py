@@ -41,6 +41,15 @@ class JobDetailOut(BaseModel):
     processed_at: datetime | None
 
 
+def _validate_expires_in_future(value: datetime) -> datetime:
+    # Naive datetimes are treated as UTC rather than blowing up the
+    # comparison against an aware "now".
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    if aware <= datetime.now(UTC):
+        raise ValueError("expires_at must be in the future")
+    return value
+
+
 class JobCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -52,12 +61,7 @@ class JobCreate(BaseModel):
     @field_validator("expires_at")
     @classmethod
     def _expires_in_future(cls, value: datetime) -> datetime:
-        # Naive datetimes are treated as UTC rather than blowing up the
-        # comparison against an aware "now".
-        aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
-        if aware <= datetime.now(UTC):
-            raise ValueError("expires_at must be in the future")
-        return value
+        return _validate_expires_in_future(value)
 
 
 class JobUpdate(BaseModel):
@@ -68,3 +72,13 @@ class JobUpdate(BaseModel):
     expires_at: datetime | None = None
     is_accepting_responses: bool | None = None
     status: JobStatus | None = None
+
+    @field_validator("expires_at")
+    @classmethod
+    def _expires_in_future(cls, value: datetime | None) -> datetime | None:
+        # TS-06/R-07: JobCreate validated this; JobUpdate didn't, so a PATCH
+        # with a past expires_at left status LIVE while the public endpoint
+        # immediately 410'd. None (field omitted) skips the check.
+        if value is None:
+            return None
+        return _validate_expires_in_future(value)
