@@ -67,6 +67,6 @@ class GoogleCalendarStore:
 
 
 def get_calendar_store() -> CalendarStore:
-    if settings.app_env == "local":
+    if settings.calendar_store == "local":
         return LocalCalendarStore()
     return GoogleCalendarStore()

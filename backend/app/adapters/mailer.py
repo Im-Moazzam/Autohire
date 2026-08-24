@@ -48,6 +48,6 @@ class GmailMailer:
 
 
 def get_mailer() -> Mailer:
-    if settings.app_env == "local":
+    if settings.mailer == "local":
         return LocalMailer()
     return GmailMailer()

@@ -41,8 +41,11 @@ class FastEmbedEmbedder:
 
 
 def get_embedder() -> Embedder:
-    if settings.app_env == "local":
+    if settings.embedder == "fastembed":
         return FastEmbedEmbedder()
-    # Cloud embedder (text-embedding-3-small, 1536-dim) is not built in this
-    # story — ADR-003's integration order, same precedent as Pinecone (drift row 10).
-    raise NotImplementedError("cloud embedder is not implemented (US-18 is local-only)")
+    # TS-07 deliberately kept scoring on fastembed only — free, deterministic,
+    # offline, already tested; an OpenAI embedder needs a migration (384 -> 1536
+    # dims) and a full corpus re-embed for no ranking benefit (drift.md).
+    raise NotImplementedError(
+        f"embedder={settings.embedder!r} is not implemented; only EMBEDDER=fastembed is supported"
+    )

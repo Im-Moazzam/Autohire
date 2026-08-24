@@ -130,9 +130,9 @@ def get_candidate(
     responses=error_responses(401, 404),
 )
 def download_resume(candidate: Candidate = Depends(get_owned_candidate)) -> FileResponse:
-    # Local mode only — resume_storage_key is always None in cloud mode
-    # (candidate_service.submit_application only sets it when APP_ENV=local),
-    # so this 404s there and the frontend uses resume_url's Drive link instead.
+    # Local mode only — resume_storage_key is only set for a local write
+    # (candidate_service.submit_application, TS-07), so a Drive-backed
+    # candidate 404s here and the frontend uses resume_url's Drive link instead.
     # Never build a redirect to a client-declared storage_key/webViewLink pair:
     # the path is asserted inside the job's folder before it is ever opened,
     # defence in depth on top of the server-generated filename (same as US-12).

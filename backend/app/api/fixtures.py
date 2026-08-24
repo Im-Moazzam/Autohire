@@ -320,19 +320,6 @@ def candidates_for_job(job_id: uuid.UUID) -> list[dict]:
     return [c for c in CANDIDATES.values() if c["job_id"] == job_id]
 
 
-def resume_url_for(candidate: dict) -> str | None:
-    """Computed, never a column — mirrors docs/schema.md's note under `candidates`."""
-    from app.core.config import settings
-
-    if settings.app_env == "local":
-        return (
-            f"/local-storage/{candidate['resume_storage_key']}"
-            if candidate["resume_storage_key"]
-            else None
-        )
-    return candidate["resume_drive_url"]
-
-
 def form_responses_for(candidate: dict) -> list[dict]:
     field_by_id = {
         field["field_id"]: field for template in TEMPLATES.values() for field in template["fields"]

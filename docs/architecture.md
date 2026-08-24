@@ -19,7 +19,10 @@ Data           PostgreSQL + pgvector (SQLAlchemy), Redis (Celery broker)
 ## The adapter rule
 
 Every external dependency sits behind a Python `Protocol` in `backend/app/adapters/base.py`,
-with two implementations: a local one and a real one. `APP_ENV` picks which.
+with two implementations: a local one and a real one. Each adapter reads its own setting —
+`RESUME_STORE`, `MAILER`, `CALENDAR_STORE`, `EMBEDDER` — independently of the others
+(TS-07; see ADR-003). `APP_ENV` no longer selects an adapter; it governs deployment
+semantics only (e.g. the session cookie's `Secure` flag).
 
 ```python
 class ResumeStore(Protocol):
@@ -36,21 +39,27 @@ adapter sees it; adapters are storage, not validation. `StoredFile` carries
 `storage_key` (local path, or the Drive file id) plus, in cloud mode, `drive_file_id`
 and `drive_url`.
 
-| Concern | `APP_ENV=local` | `APP_ENV=cloud` |
-|---|---|---|
-| Resume storage | `./storage/resumes/` | Google Drive |
-| Email | Mailhog SMTP (`http://localhost:8025`) | Gmail API |
-| Calendar | in-memory free/busy fake | Google Calendar |
-| Vector store | pgvector | Pinecone |
-| Embeddings | `all-MiniLM-L6-v2` (384-dim, free) | `text-embedding-3-small` (1536-dim) |
-| LLM feedback | canned deterministic text | OpenAI chat completions |
+| Concern | Setting | Local | Cloud |
+|---|---|---|---|
+| Resume storage | `RESUME_STORE=local\|drive` | `./storage/resumes/` | Google Drive |
+| Email | `MAILER=local\|gmail` | Mailhog SMTP (`http://localhost:8025`) | Gmail API |
+| Calendar | `CALENDAR_STORE=local\|google` | in-memory free/busy fake | Google Calendar |
+| Vector store | — | pgvector | pgvector (Pinecone dropped, drift row 10) |
+| Embeddings | `EMBEDDER=fastembed` (only value implemented) | `all-MiniLM-L6-v2` (384-dim, free) | not built — `NotImplementedError` (drift, TS-07) |
+| LLM feedback | — (reserved `OPENAI_API_KEY`, not wired) | canned deterministic text | not built |
+
+Each row above is switched independently — cutting Drive over does not require
+Gmail, Calendar, or the embedder to move too. Integration order per ADR-003:
+Drive -> Gmail -> Calendar -> embedder decision.
 
 Why this earns its keep:
 - Tests run with no network, no API keys, no quota burn, no flakiness.
 - You develop the entire pipeline before Google verification is sorted.
-- When Pinecone is down mid-demo, you flip one env var (your own risk TR-03).
-- `LocalEmbedder` and `OpenAIEmbedder` have **different dimensions**. Read the
-  dimension from config everywhere. Hardcoding 1536 will silently corrupt your index.
+- Cutting one Google service over doesn't force the others — a Drive-only
+  demo, or a Drive+Gmail demo with Calendar still local, both just work.
+- If an OpenAI embedder is ever built, `FastEmbedEmbedder` and it will have
+  **different dimensions** (384 vs 1536). Read the dimension from config
+  everywhere — hardcoding either will silently corrupt the vector index.
 
 Adapters are also where `api_usage_logs` rows get written. One place, exact counts.
 

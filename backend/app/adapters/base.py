@@ -21,7 +21,12 @@ class ResumeStore(Protocol):
     def create_job_folder(self, recruiter: Recruiter, job_id: uuid.UUID, name: str) -> str: ...
 
     def store_resume(
-        self, recruiter: Recruiter, job: "JobPosting", filename: str, content: bytes
+        self,
+        recruiter: Recruiter,
+        job: "JobPosting",
+        filename: str,
+        content: bytes,
+        display_name: str | None = None,
     ) -> StoredFile: ...
 
     def fetch_resume(self, recruiter: Recruiter, candidate: "Candidate") -> bytes: ...

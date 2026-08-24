@@ -1,12 +1,17 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useCurrentRecruiter } from "../../lib/auth";
+import { googleReconnectUrl, useCurrentRecruiter } from "../../lib/auth";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
 /** Authenticated recruiter shell — sidebar, header, and the session gate every
  * screen under it relies on. A page never needs to re-check /auth/me itself. */
 export function AppShell() {
-  const { data: recruiter, isLoading, isError, refetch } = useCurrentRecruiter();
+  const {
+    data: recruiter,
+    isLoading,
+    isError,
+    refetch,
+  } = useCurrentRecruiter();
 
   if (isLoading) {
     return (
@@ -45,6 +50,17 @@ export function AppShell() {
     <div className="flex min-h-screen bg-canvas text-ink">
       <Sidebar />
       <div className="flex flex-1 flex-col">
+        {recruiter.account_state === "REAUTH_REQUIRED" && (
+          <div className="flex items-center justify-center gap-3 bg-warning px-6 py-3 text-body text-white">
+            <span>Your Google authorization has expired.</span>
+            <a
+              href={googleReconnectUrl}
+              className="font-semibold underline underline-offset-2"
+            >
+              Reconnect Google
+            </a>
+          </div>
+        )}
         <Header />
         <main className="flex-1 overflow-y-auto p-8">
           <Outlet />

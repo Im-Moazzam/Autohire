@@ -140,8 +140,8 @@ def test_folder_creation_failure_leaves_draft_and_retry_keeps_slug(
     finally:
         app.dependency_overrides.pop(get_resume_store, None)
 
-    # APP_ENV=local in tests: our own filesystem failed, not an upstream (502
-    # is reserved for a real Drive failure in cloud mode).
+    # RESUME_STORE=local (test default): our own filesystem failed, not an
+    # upstream (502 is reserved for a real Drive failure).
     assert response.status_code == 500
     body = response.json()
     assert body["code"] == "RESUME_FOLDER_FAILED"

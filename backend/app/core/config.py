@@ -4,8 +4,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
+    # Deployment concern only (e.g. _COOKIE_SECURE) — TS-07 split adapter
+    # selection into the four settings below. Do not branch adapter code on
+    # this; it no longer means "which backend does the app talk to."
     app_env: str = "local"
     secret_key: str = "change-me"
+
+    resume_store: str = "local"  # local | drive
+    mailer: str = "local"  # local | gmail
+    calendar_store: str = "local"  # local | google
+    embedder: str = "fastembed"  # fastembed | openai (openai not implemented)
 
     # Fail loudly: nothing works safely without these.
     token_encryption_key: str
@@ -27,8 +35,9 @@ class Settings(BaseSettings):
     # a wrong env var gives a silent per-container re-download, not an error.
     embedding_cache_dir: str = "/models"
 
-    # Reserved: no cloud analyzer exists yet (TS-07 may add an optional
-    # OpenAI embedder) — not dead, just not read by anything today.
+    # Reserved for a future LLM-feedback adapter (matched/missing skills,
+    # feedback narrative) — not the embedder. TS-07 kept scoring on fastembed
+    # only (drift.md); not dead, just not read by anything today.
     openai_api_key: str = ""
 
     smtp_host: str = "mailhog"
@@ -36,9 +45,10 @@ class Settings(BaseSettings):
 
     max_resume_mb: int = 5
 
-    # Where LocalResumeStore writes resume folders (APP_ENV=local). Defaults to
-    # the docker-compose mount; not every process runs in that container (CI,
-    # a host .venv), so this must be overridable rather than hardcoded.
+    # Where LocalResumeStore writes resume folders (RESUME_STORE=local).
+    # Defaults to the docker-compose mount; not every process runs in that
+    # container (CI, a host .venv), so this must be overridable rather than
+    # hardcoded.
     local_storage_root: str = "/storage"
 
     # IANA name. Single app-wide zone, not per-recruiter (US-24) — every TIME
