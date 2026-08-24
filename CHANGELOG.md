@@ -21,8 +21,20 @@
   failure. `api.d.ts`/`docs/openapi.json` unchanged — no route touched. Embedder
   decision: kept `fastembed` only (drift row 66); `sendUpdates` decision: left
   unset so AutoHire's own Gmail invite stays the single tracked email (drift row
-  67). Slices 2-5's manual-verification items against real Google accounts are
-  not yet run; see `docs/stories/TS-07-summary.md` once they are.
+  67). Slices 2-4 manually verified against real Google accounts — see below and
+  `docs/stories/TS-07-summary.md`.
+- TS-07 (Slices 2-4): manually verified `RESUME_STORE=drive`, `MAILER=gmail`, and
+  `CALENDAR_STORE=google` end-to-end against real Google accounts, one at a time.
+  Drive: job folder created, resume uploaded into it with the fix below, link opens.
+  Gmail: invitation delivered (`delivery_status: SENT`, real `gmail_message_id`),
+  redelivery correctly no-ops via the `idempotency_key` UNIQUE constraint. Calendar:
+  event created at the correct Asia/Karachi local time (`04:30Z` UTC displays as
+  `9:30am` local — confirms `starts_at.isoformat()`'s embedded UTC offset is read
+  correctly with no explicit `timeZone` field), real joinable Meet link matching the
+  API's `google_meet_link`. Full evidence, including a testing near-miss (an
+  undersized fixture PDF tripped the `MIN_CHARS` scanned-document guard) and a
+  self-caught idempotency-check bug (wrong ID passed on the first attempt), in
+  `docs/stories/TS-07-summary.md`.
 - TS-07 (Slice 2 prep): `ResumeStore.store_resume` gained an optional
   `display_name` parameter so `DriveResumeStore` can set the uploaded file's
   Drive-visible name to the candidate's actual resume filename (sanitized),
