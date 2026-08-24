@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { canProcessJob, dateToExpiresAt, expiresAtToDateInput } from "./jobs";
 
+// vitest runs on Node; tsconfig.app.json (types: ["vite/client"]) doesn't
+// declare Node's ambient `process`, so a minimal local declaration avoids
+// pulling in @types/node project-wide for one test file.
+declare const process: { env: Record<string, string | undefined> };
+
 describe("dateToExpiresAt / expiresAtToDateInput round trip (TS-06/R-08)", () => {
   const originalTZ = process.env.TZ;
 
