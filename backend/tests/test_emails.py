@@ -22,6 +22,18 @@ from app.services.auth_service import SESSION_COOKIE, create_session_cookie
 from app.tasks.email_dispatch import email_dispatch_job
 
 
+# TS-06/R-04: POST /emails/send (manual, ad hoc send) is genuinely Phase 2 —
+# it must say so honestly instead of returning a stale fixture TaskOut whose
+# task_id 404s at GET /tasks/{id}.
+def test_send_email_is_501_not_implemented(authed_client: TestClient) -> None:
+    response = authed_client.post(
+        "/api/v1/emails/send",
+        json={"email_type": "CUSTOM", "candidate_ids": [str(uuid.uuid4())]},
+    )
+    assert response.status_code == 501
+    assert response.json()["code"] == "NOT_IMPLEMENTED"
+
+
 def _other_client(recruiter: Recruiter) -> TestClient:
     other = TestClient(app)
     other.cookies.set(SESSION_COOKIE, create_session_cookie(str(recruiter.recruiter_id)))

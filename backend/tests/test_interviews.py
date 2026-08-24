@@ -128,6 +128,27 @@ def _run_calendar_sync(
     db_session.expire_all()
 
 
+# TS-06/R-04: PATCH on a REAL slot must not 404 against the stale fixture
+# lookup — Phase 2 (reschedule/cancel) isn't built, so it must say so honestly.
+def test_patch_real_slot_is_501_not_implemented(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "c@example.com")
+
+    task = _make_task_row(db_session, recruiter, job["job_id"])
+    _run_calendar_sync(db_session, task, [candidate.candidate_id])
+    slot = db_session.query(InterviewSlot).one()
+
+    response = authed_client.patch(
+        f"/api/v1/interviews/{slot.slot_id}", json={"status": "CANCELLED"}
+    )
+    assert response.status_code == 501
+    assert response.json()["code"] == "NOT_IMPLEMENTED"
+
+
 # TC-01
 def test_schedule_three_ranked_candidates(authed_client: TestClient, db_session: Session) -> None:
     _set_preferences(authed_client)
