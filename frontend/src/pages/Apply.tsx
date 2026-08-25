@@ -9,6 +9,7 @@ import {
   Select,
   Textarea,
 } from "../components/ui";
+import { CheckCircleIcon } from "../components/ui/icons";
 import { apiErrorCode, apiErrorMessage, ApiError } from "../lib/http";
 import { resolveIdentityFields } from "../lib/identityFields";
 import { FIELD_TYPES_WITH_OPTIONS } from "../lib/templates";
@@ -182,6 +183,7 @@ export function Apply() {
       <EmptyState
         title="Application received"
         description={`Thanks for applying to ${job.data.job_title}. ${submit.data.message}`}
+        icon={<CheckCircleIcon />}
       />
     );
   }
