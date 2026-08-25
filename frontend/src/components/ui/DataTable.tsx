@@ -19,6 +19,7 @@ export interface DataTableProps<T> {
   emptyDescription?: string;
   emptyActionLabel?: string;
   onEmptyAction?: () => void;
+  emptyIcon?: ReactNode;
   /** Partial/degraded state: flag individual rows that failed without dropping the rest. */
   rowError?: (row: T) => string | undefined;
 }
@@ -34,6 +35,7 @@ export function DataTable<T>({
   emptyDescription,
   emptyActionLabel,
   onEmptyAction,
+  emptyIcon,
   rowError,
 }: DataTableProps<T>) {
   if (errorText && rows.length === 0) {
@@ -55,6 +57,7 @@ export function DataTable<T>({
         description={emptyDescription}
         actionLabel={emptyActionLabel}
         onAction={onEmptyAction}
+        icon={emptyIcon}
       />
     );
   }

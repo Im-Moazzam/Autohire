@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./http";
 import type { components } from "./api";
 import type { Status } from "../components/ui/StatusBadge";
+import type { Task } from "./tasks";
 
 export type Job = components["schemas"]["JobOut"];
 export type JobDetail = components["schemas"]["JobDetailOut"];
@@ -104,5 +105,11 @@ export function useUpdateJob(jobId: string) {
 export function useTriggerProcess() {
   return useMutation({
     mutationFn: (jobId: string) => api.post(`/jobs/${jobId}/process`),
+  });
+}
+
+export function useTriggerRank() {
+  return useMutation({
+    mutationFn: (jobId: string) => api.post<Task>(`/jobs/${jobId}/rank`),
   });
 }

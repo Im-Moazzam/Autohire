@@ -124,6 +124,123 @@
     cost of a full Docker build.
 
 ### Added
+- "Run AI ranking" now explains itself when disabled instead of just fading
+  out: a distinct amber/warning-styled button reading "Can't rank until job
+  is closed" with a lock icon, replacing the generic greyed-out primary
+  button (which only explained why via a hover tooltip a recruiter had to
+  find).
+- Undo a candidate rejection. `candidate_service._LEGAL_TRANSITIONS` gains
+  `REJECTED -> {PARSED}` (see `docs/drift.md` row 69). Undo lands on
+  `PARSED`, not `RANKED`: `ranking_service.list_ranked_candidates` INNER
+  JOINs `ai_analysis_results`, so setting `RANKED` directly (the first
+  version of this fix) produced a candidate whose status claimed it was
+  ranked while the AI-ranked list could never actually show it — caught via
+  manual testing before merge. `PARSED` accurately means "eligible for the
+  next ranking run," and a re-run of "Run AI ranking" picks it up for real
+  (`_RANKABLE_STATUSES` already includes `PARSED`). Deliberately no direct
+  `REJECTED -> INVITED` "schedule interview" shortcut either (a second
+  version had one, also dropped after manual QA) — a recruiter undoes the
+  rejection first and invites from `PARSED` like any other candidate, one
+  obvious way back into the pipeline instead of two overlapping buttons on
+  the same screen. `DECLINED` deliberately stays terminal — it records the
+  candidate's own answer, not a recruiter judgement call, so there's nothing
+  to undo there. Backend tests cover the undo edge, confirming
+  `REJECTED -> INVITED` still 409s, and confirming `DECLINED` still 409s.
+  Frontend: the existing `StatusActions` component (shared by the candidate
+  detail modal and the AI-ranked cards) now renders the extra action
+  automatically since it's driven by the same `nextStatusOptions` map, with
+  the `REJECTED -> PARSED` button reading "Undo rejection" instead of the
+  generic "Mark Parsed".
+- Clicking a card in the AI-ranked tab now opens the same candidate detail
+  modal the All-submissions table uses, instead of doing nothing —
+  `RankedCard` gained an `onOpen` handler wired to the same `selectedId`
+  state, with `stopPropagation` on its nested resume link and status-action
+  buttons so they don't also trigger the card's own click.
+- Fixed a stuck toast: triggering AI ranking's "AI ranking started." toast
+  used the `loading` variant, which by design never auto-dismisses (there's
+  no fixed duration for "still running") — but nothing ever dismissed it, so
+  it sat pinned at the bottom-right of the screen indefinitely even after
+  ranking finished. `Toast`'s `showToast` now returns the toast's id and the
+  provider exposes `dismissToast(id)`; `Candidates.tsx` captures the loading
+  toast's id and dismisses it the moment the polled task reaches a terminal
+  status, right before showing the success/failure toast.
+- Jobs list: clicking anywhere on a job card now opens its Candidates page
+  (previously only a separate "Candidates" text link did, which is now
+  removed as redundant). "Copy link" and "View / Edit" are now icon-only
+  buttons (a chain-link icon, a pencil) with hover tooltips, consistent with
+  the Templates table's icon-only actions from the same pass. Card clicks
+  from the icon buttons and the "AI process" button call `stopPropagation`
+  so they don't also navigate the card.
+- Icon pass across empty/success states and list actions, per direct UX
+  feedback that the generic dot/text-only UI "looks bad": new shared
+  `components/ui/icons.tsx` (`BriefcaseIcon`, `UsersIcon`, `FileTextIcon`,
+  `SparklesIcon`, `InboxIcon`, `AlertTriangleIcon`, `CheckCircleIcon`,
+  `LinkIcon`, `PencilIcon`, `TrashIcon`, `LockIcon`). `EmptyState`'s default
+  icon is now a real inbox/alert-triangle glyph instead of a "·"/"!"
+  placeholder character, and `DataTable` gained an `emptyIcon` passthrough.
+  Wired a contextual icon into Jobs' and Candidates' empty states (both
+  tabs) as the first usages — Templates, JobBuilder, and Apply pick up the
+  same icon set in follow-up commits.
+- Candidate-status-update errors triggered from inside the candidate detail
+  modal now render via `Modal`'s existing `errorText` prop instead of a
+  toast: an open `<dialog>` renders in the browser's top layer, above
+  everything else in the document including a `position: fixed` toast, so
+  an error toast raised from inside one renders dimmed and effectively
+  invisible underneath the modal's own backdrop. New optional `onError`
+  prop on `StatusActions` carries the message up to the modal (defaults to
+  a toast for the non-modal AI-ranked-card usage, which doesn't have this
+  problem).
+- Modal component (`components/ui/Modal.tsx`) redesign — the native `<dialog>` was
+  rendering pinned to the top-left instead of centered: Tailwind's preflight resets
+  `margin` globally, which silently breaks the browser's default dialog-centering
+  algorithm. Fixed with explicit `fixed inset-0 m-auto`. Also, per direct UX
+  feedback (a sketch marked up over a screenshot): added a proper header with an X
+  close button (replacing the always-present "Cancel" text button, which now only
+  renders for the two-button confirm variant, e.g. Templates' delete confirmation —
+  content-only modals like the candidate profile no longer show a redundant Cancel
+  below their own action buttons), a `size="lg"` variant for content-heavy modals,
+  backdrop-click-to-close, and an entrance animation. Candidates' detail modal now
+  shows an avatar-initials header and equal-width/equal-height action buttons with
+  icons, replacing mismatched auto-width text buttons. This is a standing
+  expectation for every future screen, not a one-off — see memory
+  `feedback_ux_polish_beyond_figma`. Two follow-up fixes on the same
+  component: (1) a long body no longer grows the whole dialog past the
+  viewport and scrolls the header/close-button and footer/action-buttons out
+  of view — the header and footer are now `shrink-0` and only the body
+  (`min-h-0 flex-1 overflow-y-auto`) scrolls, plus a new `footer` prop so a
+  dynamic action set (like the candidate profile's status buttons) can live
+  in that fixed footer instead of inside the scrolling body; (2) the page
+  behind the modal no longer stays scrollable while it's open —
+  `showModal()` doesn't lock body scroll on its own, so `Modal` now sets
+  `document.body.style.overflow = "hidden"` for as long as it's open.
+- US-13/US-18-19: Candidates screen (frontend) — the submissions table and
+  AI-ranked shortlist Moazzam's backend already exposed had no UI. New
+  `/jobs/:jobId/candidates` route with two tabs: **All submissions**
+  (`GET /jobs/{id}/candidates`, search + status filter, click a row for a detail
+  modal with form responses and a resume link) and **AI ranked**
+  (`GET /jobs/{id}/candidates/ranked`, reusing the existing `MatchScore` component
+  for the semantic score bar plus matched/missing skill chips and the keyword-match
+  feedback text). "Run AI ranking" triggers `POST /jobs/{id}/rank` and polls the
+  returned task via a new shared `useTask` hook (`GET /tasks/{id}`, stops polling on
+  a terminal status) — the same pattern `useTriggerProcess` will want next time it's
+  touched. Status changes (`PATCH /candidates/{id}`) are gated client-side by a
+  `nextStatusOptions` map mirroring `candidate_service._LEGAL_TRANSITIONS`, so only
+  legal actions (e.g. "Mark Rejected", "Mark Interview Invited") render — the server
+  stays the actual authority, a stale client copy just means a 409 to retry against.
+  `resume_url` is either an absolute Drive link or a backend-relative local download
+  path; added `resumeHref()` since the frontend runs on a different port than the
+  API in dev and a relative path would resolve against the wrong origin.
+  `matched_skills`/`missing_skills`/`ai_feedback_summary` come from a deterministic
+  keyword-overlap heuristic (`LocalAnalyzer`, ADR-003), not an LLM — worth knowing
+  before writing UI copy that implies otherwise. Extended `StatusBadge`'s `Status`
+  union with the submission statuses (`Submitted`, `Parsed`, `Ranked`, `Declined`,
+  `Parse Error`) rather than duplicating the badge component. Added `Jobs.tsx` a
+  "Candidates" link (with a live submission count) alongside the existing
+  "View / Edit" link. Added two small reusable motion tokens (`animate-fade-in`,
+  `animate-slide-up`) to `tokens.css` — respects the existing
+  `prefers-reduced-motion` override — used on the detail modal, ranked cards, and
+  toast entrance; applying UX polish beyond the static Figma prototype is now a
+  standing expectation for every future screen, not just this one.
 - US-26/US-27: auto-scheduled interviews and invitation email — the last story
   in Phase 1; the pipeline now runs end to end (sign in -> template -> launch
   job -> apply -> parse -> rank -> schedule -> email in Mailhog). Two commits:
