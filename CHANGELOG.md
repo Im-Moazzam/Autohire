@@ -124,6 +124,21 @@
     cost of a full Docker build.
 
 ### Added
+- Templates and Apply pick up the shared icon set introduced alongside the
+  Candidates screen: Templates' table Edit/Delete actions are now icon-only
+  buttons (pencil, trash) with hover tooltips instead of plain text links,
+  Templates' empty state gets a contextual `FileTextIcon`, and Apply's
+  "Application received" confirmation gets a `CheckCircleIcon`. Templates
+  page also no longer shows a duplicate "+ Create template" button — the
+  top-right one and the empty state's own action button were both present
+  at once.
+- Template delete confirmation: the "referenced by a job posting" error was
+  rendering behind the modal's own backdrop and effectively invisible — an
+  open `<dialog>` renders in the browser's top layer, above everything else
+  in the document including a `position: fixed` toast, so the toast was
+  dimmed underneath it. Fixed by using `Modal`'s existing `errorText` prop
+  (rendered inside the top-layer dialog itself) instead of a toast for this
+  case.
 - US-06: reopen a closed job. `job_service._LEGAL_TRANSITIONS` gains
   `CLOSED -> LIVE` (previously the job lifecycle was strictly one-way,
   `DRAFT -> LIVE -> CLOSED -> PROCESSED` — see `docs/drift.md` row 70).
