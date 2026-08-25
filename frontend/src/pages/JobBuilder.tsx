@@ -9,6 +9,7 @@ import {
   Textarea,
 } from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
+import { FileTextIcon } from "../components/ui/icons";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
 import {
@@ -90,6 +91,7 @@ export function JobBuilder() {
           description="A job's application form comes from a template. Create one, then come back to launch this job."
           actionLabel="+ Create template"
           onAction={() => navigate("/templates/new")}
+          icon={<FileTextIcon />}
         />
       </div>
     );
@@ -98,6 +100,7 @@ export function JobBuilder() {
   const mutation = isEditing ? updateJob : createJob;
   const canClose = isEditing && existing.data?.status === "LIVE";
   const canRetryLaunch = isEditing && existing.data?.status === "DRAFT";
+  const canReopen = isEditing && existing.data?.status === "CLOSED";
   const canShare = isEditing && existing.data?.status !== "DRAFT";
 
   async function handleCopyLink() {
@@ -117,6 +120,20 @@ export function JobBuilder() {
     }
     setTitleError(undefined);
     return true;
+  }
+
+  /** Shared by save and reopen — both need a deadline set in the future. */
+  function validExpiresAtIso(): string | null {
+    if (!expiresAt) {
+      setFormError("Set an application deadline.");
+      return null;
+    }
+    const iso = dateToExpiresAt(expiresAt);
+    if (new Date(iso) <= new Date()) {
+      setFormError("The deadline must be in the future.");
+      return null;
+    }
+    return iso;
   }
 
   /** Shared by the initial launch and a DRAFT retry — both call
@@ -163,15 +180,8 @@ export function JobBuilder() {
       setFormError("Choose a template.");
       return;
     }
-    if (!expiresAt) {
-      setFormError("Set an application deadline.");
-      return;
-    }
-    const expiresAtIso = dateToExpiresAt(expiresAt);
-    if (new Date(expiresAtIso) <= new Date()) {
-      setFormError("The deadline must be in the future.");
-      return;
-    }
+    const expiresAtIso = validExpiresAtIso();
+    if (!expiresAtIso) return;
 
     if (isEditing) {
       updateJob.mutate(
@@ -217,6 +227,27 @@ export function JobBuilder() {
         },
         onError: (err) =>
           showToast(apiErrorMessage(err, "Couldn't close this job."), "error"),
+      },
+    );
+  }
+
+  /** Reopen a CLOSED job. Uses the deadline already entered in the form, so
+   * a recruiter extends it (the deadline input stays editable while closed)
+   * and reopens in one action rather than two separate saves. */
+  function handleReopen() {
+    setFormError(undefined);
+    const expiresAtIso = validExpiresAtIso();
+    if (!expiresAtIso) return;
+
+    updateJob.mutate(
+      { status: "LIVE", expires_at: expiresAtIso },
+      {
+        onSuccess: () => {
+          showToast("Job reopened.", "success");
+          navigate("/jobs");
+        },
+        onError: (err) =>
+          setFormError(apiErrorMessage(err, "Couldn't reopen this job.")),
       },
     );
   }
@@ -292,7 +323,11 @@ export function JobBuilder() {
         type="date"
         value={expiresAt}
         onChange={(e) => setExpiresAt(e.target.value)}
-        helperText="Applications close at the end of this day."
+        helperText={
+          canReopen
+            ? "This job is closed. Set a future deadline and reopen it below to accept applications again."
+            : "Applications close at the end of this day."
+        }
         min={new Date().toISOString().slice(0, 10)}
       />
 
@@ -328,6 +363,15 @@ export function JobBuilder() {
             className="text-body text-primary hover:underline disabled:opacity-50"
           >
             {updateJob.isPending ? "Retrying…" : "Retry launch"}
+          </button>
+        ) : canReopen ? (
+          <button
+            type="button"
+            onClick={handleReopen}
+            disabled={updateJob.isPending}
+            className="text-body text-primary hover:underline disabled:opacity-50"
+          >
+            {updateJob.isPending ? "Reopening…" : "Reopen job"}
           </button>
         ) : (
           <span />

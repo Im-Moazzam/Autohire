@@ -21,13 +21,20 @@ from app.services import template_service
 
 _TEMPLATE_NOT_FOUND = {"code": "TEMPLATE_NOT_FOUND", "message": "Template not found."}
 _MAX_SLUG_ATTEMPTS = 5
+_REOPEN_REQUIRES_FUTURE_EXPIRY = {
+    "code": "REOPEN_REQUIRES_FUTURE_EXPIRY",
+    "message": "Reopening a closed job requires a future expires_at.",
+}
 
 # Legal transition graph, ADR-004 P3 / docs/api-contract.md § Jobs. Moved out
 # of app/api/fixtures.py — jobs.py was its only caller.
+# CLOSED -> LIVE ("reopen") deliberately excludes PROCESSED -> LIVE: a
+# PROCESSED job already has ranked/invited/scheduled candidates, and mixing
+# those with a fresh applicant pool needs a re-ranking story of its own.
 _LEGAL_TRANSITIONS: dict[JobStatus, set[JobStatus]] = {
     JobStatus.DRAFT: {JobStatus.LIVE},
     JobStatus.LIVE: {JobStatus.CLOSED},
-    JobStatus.CLOSED: {JobStatus.PROCESSED},
+    JobStatus.CLOSED: {JobStatus.PROCESSED, JobStatus.LIVE},
     JobStatus.PROCESSED: set(),
 }
 
@@ -223,6 +230,19 @@ def update_job(
             # Retry path: same finalize_launch the create path runs, so a
             # second failed attempt leaves the row DRAFT again, not a new row.
             job = finalize_launch(db, recruiter, job, store)
+        elif job.status == JobStatus.CLOSED and payload.status == JobStatus.LIVE:
+            # Reopen: whichever expires_at will be live after this call — the
+            # payload's if provided, else the job's existing one — must still
+            # be in the future, or the job would come back LIVE and
+            # immediately fail assert_job_accepting's expiry check.
+            new_expires_at = payload.expires_at or job.expires_at
+            if new_expires_at <= datetime.now(UTC):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=_REOPEN_REQUIRES_FUTURE_EXPIRY,
+                )
+            job.status = payload.status
+            job.is_accepting_responses = True
         else:
             job.status = payload.status
             if payload.status == JobStatus.CLOSED:
