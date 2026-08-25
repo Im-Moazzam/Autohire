@@ -40,6 +40,16 @@ def _drive_display_name(original_filename: str | None, extension: str) -> str:
 # job_service._LEGAL_TRANSITIONS. PARSED is never re-parsed — the retry AC
 # ("retry only SUBMITTED and PARSE_ERROR") is itself a transition rule, not
 # just a query filter. REJECTED is reachable from any non-terminal state.
+# REJECTED -> PARSED is the one back-edge (docs/drift.md row 70): a
+# recruiter can undo an accidental rejection. Lands on PARSED, not RANKED —
+# ranking_service.list_ranked_candidates INNER JOINs ai_analysis_results, so a
+# RANKED candidate with no analysis row would carry a status the ranked list
+# can never actually show; PARSED accurately says "eligible for the next
+# ranking run" without claiming one already happened. Deliberately no direct
+# REJECTED -> INVITED: a recruiter who wants to interview a reconsidered
+# candidate undoes the rejection first, same path as any other candidate —
+# one obvious way back in, not two. DECLINED stays terminal — that's the
+# candidate's own answer, not the recruiter's.
 _LEGAL_TRANSITIONS: dict[SubmissionStatus, set[SubmissionStatus]] = {
     SubmissionStatus.SUBMITTED: {
         SubmissionStatus.PARSED,
@@ -66,7 +76,7 @@ _LEGAL_TRANSITIONS: dict[SubmissionStatus, set[SubmissionStatus]] = {
     },
     SubmissionStatus.CONFIRMED: {SubmissionStatus.RESCHEDULED, SubmissionStatus.REJECTED},
     SubmissionStatus.DECLINED: set(),
-    SubmissionStatus.REJECTED: set(),
+    SubmissionStatus.REJECTED: {SubmissionStatus.PARSED},
 }
 
 

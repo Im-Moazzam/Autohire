@@ -391,6 +391,69 @@ def test_patch_status_change_only(authed_client: TestClient, db_session: Session
     assert response.json()["submission_status"] == "REJECTED"
 
 
+def test_patch_undo_rejection_back_to_parsed(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """Lands on PARSED, not RANKED — list_ranked_candidates INNER JOINs
+    ai_analysis_results, so a RANKED status with no analysis row would be a
+    candidate the ranked list can never actually show."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "reconsidered@example.com",
+        submission_status="REJECTED",
+    )
+
+    response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "PARSED"}
+    )
+    assert response.status_code == 200
+    assert response.json()["submission_status"] == "PARSED"
+
+
+def test_patch_reject_then_invite_is_invalid_without_undo_first(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """One obvious way back in: a rejected candidate must be undone (back to
+    PARSED) before they can be invited — no direct REJECTED -> INVITED
+    shortcut."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "second-chance@example.com",
+        submission_status="REJECTED",
+    )
+
+    response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "INVITED"}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "INVALID_STATE_TRANSITION"
+
+
+def test_patch_declined_stays_terminal(authed_client: TestClient, db_session: Session) -> None:
+    """Unlike REJECTED, DECLINED is the candidate's own answer, not the
+    recruiter's — it must stay terminal even after the REJECTED back-edge."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "declined@example.com",
+        submission_status="DECLINED",
+    )
+
+    response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "RANKED"}
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "INVALID_STATE_TRANSITION"
+
+
 def test_patch_rejects_unknown_field(authed_client: TestClient, db_session: Session) -> None:
     template = _create_template(authed_client)
     job = _create_job(authed_client, template["template_id"])
