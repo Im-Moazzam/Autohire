@@ -219,6 +219,67 @@ def test_patch_close_sets_closed_and_stops_accepting(authed_client: TestClient) 
     assert body["is_accepting_responses"] is False
 
 
+def test_reopen_closed_job_with_future_expires_at_goes_live(authed_client: TestClient) -> None:
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "CLOSED"})
+
+    response = authed_client.patch(
+        f"/api/v1/jobs/{job['job_id']}",
+        json={"status": "LIVE", "expires_at": "2028-01-01T00:00:00Z"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "LIVE"
+    assert body["is_accepting_responses"] is True
+    assert body["expires_at"].startswith("2028-01-01")
+
+
+def test_reopen_closed_job_keeps_existing_future_expires_at(authed_client: TestClient) -> None:
+    """A job closed early by hand (expires_at still in the future) can reopen
+    without the recruiter having to also resend expires_at."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "CLOSED"})
+
+    response = authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "LIVE"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "LIVE"
+
+
+def test_reopen_closed_job_with_no_future_expiry_is_409(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """The common case: the job's own deadline already passed (that's how it
+    got closed), and the recruiter forgets to extend it while reopening."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "CLOSED"})
+
+    db_job = db_session.get(JobPosting, uuid.UUID(job["job_id"]))
+    assert db_job is not None
+    db_job.expires_at = datetime(2020, 1, 1, tzinfo=UTC)
+    db_session.commit()
+
+    response = authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "LIVE"})
+    assert response.status_code == 409
+    assert response.json()["code"] == "REOPEN_REQUIRES_FUTURE_EXPIRY"
+
+
+def test_reopen_processed_job_is_invalid_transition(authed_client: TestClient) -> None:
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "CLOSED"})
+    authed_client.patch(f"/api/v1/jobs/{job['job_id']}", json={"status": "PROCESSED"})
+
+    response = authed_client.patch(
+        f"/api/v1/jobs/{job['job_id']}",
+        json={"status": "LIVE", "expires_at": "2028-01-01T00:00:00Z"},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "INVALID_STATE_TRANSITION"
+
+
 # TC-12
 def test_list_jobs_only_returns_callers_jobs(
     authed_client: TestClient, second_recruiter: Recruiter

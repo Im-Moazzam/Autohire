@@ -138,6 +138,26 @@
     cost of a full Docker build.
 
 ### Added
+- US-06: reopen a closed job. `job_service._LEGAL_TRANSITIONS` gains
+  `CLOSED -> LIVE` (previously the job lifecycle was strictly one-way,
+  `DRAFT -> LIVE -> CLOSED -> PROCESSED` — see `docs/drift.md` row 70).
+  Reopening requires a future `expires_at` (the payload's if provided, else
+  the job's existing one) or 409s `REOPEN_REQUIRES_FUTURE_EXPIRY`, so a job
+  can never come back `LIVE` already expired, and auto-sets
+  `is_accepting_responses = True`. Deliberately scoped to `CLOSED` only —
+  `PROCESSED -> LIVE` stays illegal, since a processed job already has
+  ranked/invited/scheduled candidates that a fresh applicant pool would need
+  a re-ranking story to reconcile with. Frontend: `JobBuilder.tsx`'s existing
+  "Application deadline" field (already editable while editing a job)
+  doubles as the new deadline; a "Reopen job" action appears when editing a
+  `CLOSED` job, submits `{status: "LIVE", expires_at}` in one call, and
+  shows the specific "must be in the future" validation client-side before
+  ever hitting the API. Four new backend tests in `test_jobs.py` cover
+  reopen-with-future-expiry, reopen-keeping-an-already-future expiry, the
+  409 case, and confirming `PROCESSED -> LIVE` is still rejected. Its
+  "you need a template first" empty state also picked up a contextual icon
+  (`FileTextIcon`) from the shared icon set introduced alongside the
+  Candidates screen.
 - "Run AI ranking" now explains itself when disabled instead of just fading
   out: a distinct amber/warning-styled button reading "Can't rank until job
   is closed" with a lock icon, replacing the generic greyed-out primary
