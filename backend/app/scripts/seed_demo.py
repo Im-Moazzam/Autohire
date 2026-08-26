@@ -10,6 +10,7 @@ re-run after `mise run reset`. Never run this against anything but a local
 dev database - see _refuse_unless_local below.
 """
 
+import os
 import uuid
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
@@ -38,7 +39,7 @@ from app.schemas.enums import (
     TaskStatus,
     TaskType,
 )
-from app.scripts.seed import _refuse_unless_local, seed_recruiter
+from app.scripts.seed import _FAKE_USERINFO, _refuse_unless_local, seed_recruiter
 from app.services.resume_parser import extract_text
 
 SEED_RESUMES_DIR = Path(__file__).resolve().parents[2] / "seed_resumes"
@@ -154,13 +155,51 @@ def _build_job(
     return job
 
 
+_ME_SENTINEL = "@me"
+
+
+def _most_recently_logged_in(db: Session) -> Recruiter:
+    """Excludes the synthetic seed.py identity - only a recruiter who has
+    actually completed real Google OAuth counts as "me" for a live demo."""
+    recruiter = (
+        db.query(Recruiter)
+        .filter(Recruiter.google_user_id != _FAKE_USERINFO.sub)
+        .order_by(Recruiter.last_login_at.desc().nullslast())
+        .first()
+    )
+    if recruiter is None:
+        raise SystemExit(
+            "SEED_DEMO_EMAIL=@me: no real recruiter has logged in yet (excluding the "
+            "synthetic seed.py identity) - log in via Google OAuth first."
+        )
+    return recruiter
+
+
+def _target_recruiter(db: Session) -> Recruiter:
+    """SEED_DEMO_EMAIL attaches the demo world to a recruiter who already
+    signed in via real Google OAuth, instead of the synthetic seed.py
+    identity - useful when testing against your own logged-in session, or
+    live-demoing the flow end to end. SEED_DEMO_EMAIL=@me auto-targets
+    whoever most recently logged in, so a demo needs no email typed at all:
+    log in fresh, then run `mise run db:seed-demo-me`."""
+    email = os.getenv("SEED_DEMO_EMAIL")
+    if not email:
+        return seed_recruiter(db)
+    if email == _ME_SENTINEL:
+        return _most_recently_logged_in(db)
+    recruiter = db.query(Recruiter).filter_by(email=email).one_or_none()
+    if recruiter is None:
+        raise SystemExit(f"SEED_DEMO_EMAIL={email!r}: no recruiter with that email exists yet")
+    return recruiter
+
+
 def main() -> None:
     _refuse_unless_local()
     db = SessionLocal()
     store = LocalResumeStore()
     try:
         _wipe(db)
-        recruiter = seed_recruiter(db)
+        recruiter = _target_recruiter(db)
         db.flush()
 
         now = datetime.now(UTC)
