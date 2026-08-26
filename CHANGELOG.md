@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- Dev tooling: `mise run db:seed-demo` (`backend/app/scripts/seed_demo.py`) rebuilds a
+  full demo world — recruiter, templates, jobs across every status, candidates across
+  every submission status, rankings, interview slots, email logs — built from real resumes
+  dropped in `backend/seed_resumes/` (gitignored; see its README), falling back to the
+  bundled test fixture on a fresh clone. Idempotent (deterministic IDs), wipe-and-rebuild
+  each run. Both this and the existing `seed.py` now refuse to run unless `APP_ENV=local`.
+- `mise run db:test-create` provisions a dedicated `autohire_test` database; `mise run
+  test` and `mise run docs:tests` now run pytest against it instead of the dev database.
+  A session-scoped guard in `backend/tests/conftest.py` refuses to run the suite at all
+  against anything but a `*_test` database, since teardown deletes every row in every
+  table on every run — previously this silently wiped local dev/demo data (including the
+  login session) on every `make test`/`make docs`.
+
 ### Fixed
 - TS-08 (D-01): `make docs-erd` silently emitted `@startuml\n@enduml` for its entire
   history — `backend/app/scripts/dump_erd.py` imported only `app.core.db.Base`, never

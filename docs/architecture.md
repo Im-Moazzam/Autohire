@@ -124,3 +124,32 @@ src/
 
 Two shells: the recruiter app (sidebar 260px, header 72px) and the public apply page
 (centered, no sidebar, no auth). They share `components/ui` and nothing else.
+
+## Environments and seeding (future)
+
+There is no staging/prod deployment yet — everything above describes local dev. Two
+scripts exist for local-only test data: `app/scripts/seed.py` (one fake recruiter, for a
+session cookie) and `app/scripts/seed_demo.py` (a full demo world: templates, jobs across
+every status, candidates across every submission status, rankings, interviews, emails —
+built from real resumes dropped in `backend/seed_resumes/`, see that folder's README).
+Both refuse to run unless `APP_ENV=local` — dev-only tooling, never safe to point at a
+real deployment.
+
+When a staging/prod environment exists:
+
+- Seeding must target a database that is provably not prod (a separate `DATABASE_URL`,
+  ideally a distinct host/instance, not just a different db name on the same server).
+- A real recruiter's data already isn't at risk from sign-out — `upsert_recruiter`
+  (`app/services/auth_service.py`) keys on `google_user_id`, and `/auth/logout`
+  (`app/api/routes/auth.py`) only clears the session cookie, never a DB row. Keep it that
+  way: no future "cleanup on logout" logic.
+- If synthetic demo data is ever wanted in staging (e.g. a sales demo account), it should
+  be a real recruiter row created through the normal OAuth flow, seeded by job/candidate
+  ID under that recruiter — never a wipe-and-rebuild script sharing tenancy with real
+  accounts.
+
+Separately, local pytest runs against a dedicated `autohire_test` database
+(`mise run db:test-create`, wired into `mise run test`) — never the dev database. A
+session-scoped guard in `backend/tests/conftest.py` refuses to run pytest at all if
+`DATABASE_URL` isn't a `*_test` database, because the suite's teardown deletes every row
+in every table.
