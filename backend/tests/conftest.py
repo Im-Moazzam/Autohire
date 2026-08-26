@@ -1,3 +1,4 @@
+import os
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,22 @@ from app.models.recruiter import Recruiter, RecruiterState
 from app.models.scheduling import SchedulingPreference
 from app.models.template import FormTemplate
 from app.worker import celery_app
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _refuse_to_run_against_dev_db() -> None:
+    """db_session below ends every test with an unfiltered DELETE across all
+    tables. Against the dev database that silently destroys local work (and
+    the login session). Fail loudly instead of wiping it. Escape hatch for a
+    deliberate one-off: ALLOW_DEV_DB_TESTS=1."""
+    if os.getenv("ALLOW_DEV_DB_TESTS") == "1":
+        return
+    if not settings.database_url.rsplit("/", 1)[-1].endswith("_test"):
+        pytest.exit(
+            f"Refusing to run: DATABASE_URL is {settings.database_url!r}, not a *_test "
+            "database. Tests DELETE every row on teardown. Use `mise run test`.",
+            returncode=1,
+        )
 
 
 @pytest.fixture(autouse=True)

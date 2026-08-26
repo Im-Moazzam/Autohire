@@ -4,6 +4,7 @@ node = "20"
 
 [env]
 _.python.venv = { path = ".venv", create = true }
+TEST_DATABASE_URL = "postgresql+psycopg://autohire:autohire@db:5432/autohire_test"
 
 [tasks.setup]
 description = "One-time: toolchain + hooks + deps"
@@ -34,12 +35,24 @@ description = "Create an Alembic revision. Usage: mise run db:revision -- \"add 
 run = "docker compose exec api alembic revision --autogenerate -m \"{{arg(name='m')}}\""
 
 [tasks."db:seed"]
-description = "Seed the database"
+description = "Seed one fake recruiter (no demo data)"
 run = "docker compose exec api python -m app.scripts.seed"
 
+[tasks."db:seed-demo"]
+description = "Rebuild a full demo world: recruiter, templates, jobs, candidates, rankings, interviews, emails. Drop real resumes in backend/seed_resumes/ first (see its README)."
+run = "docker compose exec api python -m app.scripts.seed_demo"
+
+[tasks."db:test-create"]
+description = "One-time (and safe to re-run): create + migrate the autohire_test database, so tests never run against dev data"
+run = [
+  "docker compose exec -T db psql -U autohire -d postgres -c \"SELECT 1 FROM pg_database WHERE datname='autohire_test'\" | grep -q 1 || docker compose exec -T db createdb -U autohire autohire_test",
+  "docker compose exec -e DATABASE_URL={{env.TEST_DATABASE_URL}} api alembic upgrade head",
+]
+
 [tasks.test]
-description = "Run backend + frontend test suites"
-run = ["docker compose exec api pytest -q --cov=app/services --cov-fail-under=70", "cd frontend && npm run test -- --run"]
+description = "Run backend + frontend test suites (backend runs against autohire_test, never the dev database)"
+depends = ["db:test-create"]
+run = ["docker compose exec -e DATABASE_URL={{env.TEST_DATABASE_URL}} api pytest -q --cov=app/services --cov-fail-under=70", "cd frontend && npm run test -- --run"]
 
 [tasks.e2e]
 description = "Run Playwright e2e tests"
@@ -66,13 +79,14 @@ description = "Regenerate class diagram from models and services"
 run = ["mkdir -p docs/generated", "docker compose exec -T api pyreverse -o puml -p AutoHire app/models app/services -d /app/../docs/generated"]
 
 [tasks."docs:tests"]
-description = "Regenerate test + coverage report"
-run = ["mkdir -p docs/generated", "docker compose exec api pytest --html=/app/../docs/generated/test-report.html --self-contained-html --cov=app --cov-report=html:/app/../docs/generated/coverage"]
+description = "Regenerate test + coverage report (runs against autohire_test, never the dev database)"
+depends = ["db:test-create"]
+run = ["mkdir -p docs/generated", "docker compose exec -e DATABASE_URL={{env.TEST_DATABASE_URL}} api pytest --html=/app/../docs/generated/test-report.html --self-contained-html --cov=app --cov-report=html:/app/../docs/generated/coverage"]
 
 [tasks.docs]
 description = "Regenerate all report artifacts"
 depends = ["docs:api", "docs:erd", "docs:uml", "docs:tests"]
 
 [tasks.reset]
-description = "Wipe volumes, rebuild, migrate, seed"
+description = "DESTRUCTIVE: wipes the database. Wipe volumes, rebuild, migrate, seed. Run 'mise run db:seed-demo' after to rebuild demo data."
 run = ["docker compose down -v", "docker compose up -d --build", "sleep 8", "mise run db:migrate", "mise run db:seed"]

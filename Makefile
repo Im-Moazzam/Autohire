@@ -1,3 +1,5 @@
+# New dev tooling (test-db isolation, demo seeding) lives in .mise.toml
+# (mise run <task>) going forward; this file covers the original targets only.
 .PHONY: up down logs migrate revision seed test lint e2e api-client docs docs-api docs-erd docs-uml docs-tests reset setup
 
 setup:      ## one-time: toolchain + hooks + deps
@@ -61,6 +63,7 @@ docs-tests: ## test + coverage report for the IV&V appendix
 	docker compose exec api pytest --html=/app/../docs/generated/test-report.html \
 		--self-contained-html --cov=app --cov-report=html:/app/../docs/generated/coverage
 
+# DESTRUCTIVE: wipes the database. Run 'mise run db:seed-demo' after to rebuild demo data.
 reset:
 	docker compose down -v && docker compose up -d --build
 	sleep 8 && $(MAKE) migrate && $(MAKE) seed

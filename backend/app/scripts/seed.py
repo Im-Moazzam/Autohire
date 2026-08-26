@@ -4,8 +4,12 @@ needed) and prints a ready-to-use session cookie value.
     mise run db:seed
 """
 
+from sqlalchemy.orm import Session
+
 from app.adapters.google.oauth import GoogleTokens, GoogleUserInfo
+from app.core.config import settings
 from app.core.db import SessionLocal
+from app.models.recruiter import Recruiter
 from app.services.auth_service import create_session_cookie, upsert_recruiter
 
 _FAKE_TOKENS = GoogleTokens(
@@ -29,10 +33,20 @@ _FAKE_USERINFO = GoogleUserInfo(
 )
 
 
+def _refuse_unless_local() -> None:
+    if settings.app_env != "local":
+        raise SystemExit("Refusing to seed: APP_ENV is not 'local'. Seeding is dev-only tooling.")
+
+
+def seed_recruiter(db: Session) -> Recruiter:
+    return upsert_recruiter(db, _FAKE_TOKENS, _FAKE_USERINFO)
+
+
 def main() -> None:
+    _refuse_unless_local()
     db = SessionLocal()
     try:
-        recruiter = upsert_recruiter(db, _FAKE_TOKENS, _FAKE_USERINFO)
+        recruiter = seed_recruiter(db)
         cookie = create_session_cookie(str(recruiter.recruiter_id))
     finally:
         db.close()
