@@ -42,6 +42,10 @@ run = "docker compose exec api python -m app.scripts.seed"
 description = "Rebuild a full demo world: recruiter, templates, jobs, candidates, rankings, interviews, emails. Drop real resumes in backend/seed_resumes/ first (see its README)."
 run = "docker compose exec api python -m app.scripts.seed_demo"
 
+[tasks."db:seed-demo-me"]
+description = "Same as db:seed-demo, but attaches the demo world to whoever most recently logged in via real Google OAuth (not the synthetic seed identity). For live demos: log in fresh, then run this."
+run = "docker compose exec -e SEED_DEMO_EMAIL=@me api python -m app.scripts.seed_demo"
+
 [tasks."db:test-create"]
 description = "One-time (and safe to re-run): create + migrate the autohire_test database, so tests never run against dev data"
 run = [
