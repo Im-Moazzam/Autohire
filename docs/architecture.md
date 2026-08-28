@@ -129,9 +129,9 @@ Two shells: the recruiter app (sidebar 260px, header 72px) and the public apply 
 
 There is no staging/prod deployment yet — everything above describes local dev. Two
 scripts exist for local-only test data: `app/scripts/seed.py` (one fake recruiter, for a
-session cookie) and `app/scripts/seed_demo.py` (a full demo world: templates, jobs across
-every status, candidates across every submission status, rankings, interviews, emails —
-built from real resumes dropped in `backend/seed_resumes/`, see that folder's README).
+session cookie) and `app/scripts/seed_demo.py` (a minimal demo world: one template, a
+single live job, and every resume dropped in `backend/seed_resumes/` applied to it as a
+freshly submitted candidate — see that folder's README).
 Both refuse to run unless `APP_ENV=local` — dev-only tooling, never safe to point at a
 real deployment.
 

@@ -47,6 +47,12 @@
   `docs/drift.md` row 68.
 
 ### Changed
+- `mise run db:seed-demo` now builds a minimal demo world instead of a full
+  one: a single live job ("Backend Engineer") with every seed resume applied
+  to it as a freshly `SUBMITTED` candidate — no other job statuses, no
+  ranking/interview/email data. Matches the actual demo scenario needed
+  (one live job, candidates at the applied stage) instead of exercising
+  every status the UI can show.
 - TS-08 (D-02, D-06): verified all four `make docs` targets — `docs:api` and
   `docs:uml` already correct, `docs:tests` (previously unverified) now confirmed
   passing: 217 tests, 93% coverage. Regenerated and committed `docs/generated/`
