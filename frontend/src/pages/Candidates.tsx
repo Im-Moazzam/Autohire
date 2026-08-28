@@ -11,7 +11,15 @@ import {
 } from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
-import { LockIcon, UsersIcon } from "../components/ui/icons";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  FileTextIcon,
+  LockIcon,
+  SparklesIcon,
+  UsersIcon,
+  XIcon,
+} from "../components/ui/icons";
 import { apiErrorMessage } from "../lib/http";
 import { JOB_STATUS_LABELS, useJob, useTriggerRank } from "../lib/jobs";
 import { useTask } from "../lib/tasks";
@@ -36,87 +44,6 @@ const STATUS_OPTIONS = [
     label,
   })),
 ];
-
-function SparkleIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8" />
-    </svg>
-  );
-}
-
-function ArrowLeftIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M19 12H5M12 19l-7-7 7-7" />
-    </svg>
-  );
-}
-
-function FileIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-      <path d="M14 2v6h6" />
-    </svg>
-  );
-}
-
-function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  );
-}
-
-function XIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
-}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
@@ -143,7 +70,7 @@ function ResumeLink({ url }: { url: string | null | undefined }) {
       rel="noreferrer"
       className="inline-flex items-center gap-1 text-primary hover:underline"
     >
-      <FileIcon className="h-4 w-4" />
+      <FileTextIcon className="h-4 w-4" />
       Resume
     </a>
   );
@@ -469,9 +396,7 @@ export function Candidates() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-page font-semibold">
-              {job.isLoading
-                ? "Loading…"
-                : (job.data?.job_title ?? "Candidates")}
+              {job.isLoading ? "Loading…" : job.data?.job_title ?? "Candidates"}
             </h1>
             {job.data && (
               <StatusBadge status={JOB_STATUS_LABELS[job.data.status]} />
@@ -497,7 +422,7 @@ export function Candidates() {
                 aria-hidden="true"
               />
             ) : (
-              <SparkleIcon className="h-4 w-4" />
+              <SparklesIcon className="h-4 w-4" />
             )}
             {isRanking || triggerRank.isPending ? "Ranking…" : "Run AI ranking"}
           </button>
@@ -602,6 +527,14 @@ export function Candidates() {
             emptyDescription="Applications will show up here once candidates apply."
             emptyIcon={<UsersIcon />}
           />
+          {candidates.data &&
+            candidates.data.total > candidates.data.items.length && (
+              <p className="text-helper text-muted">
+                Showing {candidates.data.items.length} of{" "}
+                {candidates.data.total} submissions. Narrow your search or
+                status filter to see the rest.
+              </p>
+            )}
         </>
       ) : ranked.isLoading ? (
         <div className="flex flex-col gap-4">
@@ -628,7 +561,7 @@ export function Candidates() {
               ? "Run AI ranking above to score and rank submissions."
               : "Close this job, then run AI ranking to score submissions."
           }
-          icon={<SparkleIcon />}
+          icon={<SparklesIcon />}
         />
       ) : (
         <div className="flex flex-col gap-4">

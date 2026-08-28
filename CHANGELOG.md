@@ -17,6 +17,27 @@
   login session) on every `make test`/`make docs`.
 
 ### Fixed
+- Post-merge review of PRs #37/#38/#39 (candidates screen, reopen-closed-job,
+  icon polish): `Candidates.tsx` reimplemented five icons (`SparkleIcon`,
+  `ArrowLeftIcon`, `FileIcon`, `CheckIcon`, `XIcon`) as local one-offs instead
+  of using `components/ui/icons.tsx` — `SparkleIcon` was a byte-for-byte
+  duplicate of that same PR's own `SparklesIcon`. Moved `ArrowLeftIcon`,
+  `CheckIcon`, `XIcon` into the shared icon set; `Candidates.tsx` now imports
+  all five from there (`FileIcon` usages replaced with the existing
+  `FileTextIcon`).
+- `useCandidates` (`frontend/src/lib/candidates.ts`) hardcodes `size=100`
+  (the backend's hard max, `pagination_params`'s `le=100`) with no way to
+  reach a job's submissions beyond that — a job with 100+ applicants
+  silently truncated the "All submissions" table with no indication more
+  existed. `Candidates.tsx` now reads the existing `total` field already
+  returned by the `{items, total, page, size}` envelope and shows a "Showing
+  N of total" note prompting a narrower search/status filter when truncated,
+  rather than building a paging UI no other list in the app has yet.
+- Reopen-a-closed-job (PR #38) was filed under story `US-06`, which was
+  already `Done` and describes launching a job, not reopening one — no story
+  file existed with acceptance criteria for the reopen behaviour. Backfilled
+  as `docs/stories/TS-09.md`; `docs/drift.md` row 70's story column
+  corrected to point at it.
 - TS-08 (D-01): `make docs-erd` silently emitted `@startuml\n@enduml` for its entire
   history — `backend/app/scripts/dump_erd.py` imported only `app.core.db.Base`, never
   any model module, so `Base.metadata` was empty. Added `import app.models`; the
@@ -153,7 +174,9 @@
   dimmed underneath it. Fixed by using `Modal`'s existing `errorText` prop
   (rendered inside the top-layer dialog itself) instead of a toast for this
   case.
-- US-06: reopen a closed job. `job_service._LEGAL_TRANSITIONS` gains
+- TS-09: reopen a closed job (filed under `US-06` at merge time; that story
+  was already `Done` and unrelated — see `docs/stories/TS-09.md`).
+  `job_service._LEGAL_TRANSITIONS` gains
   `CLOSED -> LIVE` (previously the job lifecycle was strictly one-way,
   `DRAFT -> LIVE -> CLOSED -> PROCESSED` — see `docs/drift.md` row 70).
   Reopening requires a future `expires_at` (the payload's if provided, else
