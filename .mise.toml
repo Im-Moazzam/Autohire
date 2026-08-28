@@ -39,7 +39,7 @@ description = "Seed one fake recruiter (no demo data)"
 run = "docker compose exec api python -m app.scripts.seed"
 
 [tasks."db:seed-demo"]
-description = "Rebuild a full demo world: recruiter, templates, jobs, candidates, rankings, interviews, emails. Drop real resumes in backend/seed_resumes/ first (see its README)."
+description = "Rebuild a minimal demo world: recruiter, one live job, candidates freshly submitted with resumes. Drop real resumes in backend/seed_resumes/ first (see its README)."
 run = "docker compose exec api python -m app.scripts.seed_demo"
 
 [tasks."db:seed-demo-me"]
