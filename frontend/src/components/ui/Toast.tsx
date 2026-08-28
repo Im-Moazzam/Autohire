@@ -23,7 +23,11 @@ const variantClasses: Record<Variant, string> = {
 };
 
 interface ToastContextValue {
-  showToast: (message: string, variant?: Variant) => void;
+  /** Returns the toast's id. A "loading" toast never auto-dismisses (there's
+   * no fixed duration for "the operation is still running") — capture the id
+   * and call dismissToast once you know the outcome. */
+  showToast: (message: string, variant?: Variant) => number;
+  dismissToast: (id: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -37,22 +41,24 @@ export function useToast() {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  const dismissToast = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   const showToast = useCallback(
     (message: string, variant: Variant = "success") => {
       const id = Date.now();
       setToasts((prev) => [...prev, { id, message, variant }]);
       if (variant !== "loading") {
-        setTimeout(
-          () => setToasts((prev) => prev.filter((t) => t.id !== id)),
-          4000,
-        );
+        setTimeout(() => dismissToast(id), 4000);
       }
+      return id;
     },
-    [],
+    [dismissToast],
   );
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={{ showToast, dismissToast }}>
       {children}
       {createPortal(
         <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50">
@@ -61,7 +67,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               key={t.id}
               role="status"
               className={[
-                "flex items-center gap-2 rounded-control px-4 py-3 text-body shadow-modal",
+                "flex items-center gap-2 rounded-control px-4 py-3 text-body shadow-modal animate-slide-up",
                 variantClasses[t.variant],
               ].join(" ")}
             >

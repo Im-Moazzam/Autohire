@@ -7,11 +7,16 @@ export type Status =
   | "Processed"
   | "Processing"
   | "Scheduled"
+  | "Submitted"
+  | "Parsed"
+  | "Ranked"
   | "Interview Invited"
   | "Confirmed"
+  | "Declined"
   | "Reschedule Requested"
   | "Rejected"
   | "Failed"
+  | "Parse Error"
   | "Connected"
   | "Disconnected"
   | "Syncing"
@@ -28,11 +33,16 @@ const statusTone: Record<Status, Tone> = {
   Processed: "primary",
   Processing: "ai",
   Scheduled: "primary",
+  Submitted: "primary",
+  Parsed: "muted",
+  Ranked: "ai",
   "Interview Invited": "primary",
   Confirmed: "success",
+  Declined: "warning",
   "Reschedule Requested": "warning",
   Rejected: "error",
   Failed: "error",
+  "Parse Error": "error",
   Connected: "success",
   Disconnected: "muted",
   Syncing: "ai",

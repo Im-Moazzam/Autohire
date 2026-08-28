@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { EmptyState, Input, Select, StatusBadge } from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
+import { BriefcaseIcon, LinkIcon, PencilIcon } from "../components/ui/icons";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorMessage } from "../lib/http";
 import {
@@ -40,11 +41,21 @@ function daysLeftLabel(expiresAt: string): string {
 function JobCard({ job }: { job: Job }) {
   const { showToast } = useToast();
   const triggerProcess = useTriggerProcess();
+  const navigate = useNavigate();
 
   const process = canProcessJob(job);
   const canShare = job.status !== "DRAFT";
+  // Nowhere useful to land on a DRAFT job's candidates page — it can't have
+  // any yet — so the card itself only becomes clickable once the job is live
+  // or further along.
+  const canOpenCandidates = job.status !== "DRAFT";
 
-  function handleProcess() {
+  function openCandidates() {
+    if (canOpenCandidates) navigate(`/jobs/${job.job_id}/candidates`);
+  }
+
+  function handleProcess(e: React.MouseEvent) {
+    e.stopPropagation();
     triggerProcess.mutate(job.job_id, {
       onSuccess: () => showToast("Resume processing started.", "success"),
       onError: (err) =>
@@ -52,7 +63,8 @@ function JobCard({ job }: { job: Job }) {
     });
   }
 
-  async function handleCopyLink() {
+  async function handleCopyLink(e: React.MouseEvent) {
+    e.stopPropagation();
     try {
       await navigator.clipboard.writeText(job.apply_url);
       showToast("Application link copied.", "success");
@@ -62,7 +74,26 @@ function JobCard({ job }: { job: Job }) {
   }
 
   return (
-    <div className="rounded-card border border-border bg-surface p-5">
+    <div
+      onClick={openCandidates}
+      role={canOpenCandidates ? "button" : undefined}
+      tabIndex={canOpenCandidates ? 0 : undefined}
+      onKeyDown={
+        canOpenCandidates
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openCandidates();
+              }
+            }
+          : undefined
+      }
+      title={canOpenCandidates ? "View candidates" : undefined}
+      className={[
+        "rounded-card border border-border bg-surface p-5 transition-shadow",
+        canOpenCandidates ? "cursor-pointer hover:shadow-card" : "",
+      ].join(" ")}
+    >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
@@ -78,21 +109,26 @@ function JobCard({ job }: { job: Job }) {
             <span>Created {formatDate(job.created_at)}</span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2">
           {canShare && (
             <button
               type="button"
               onClick={handleCopyLink}
-              className="text-body text-primary hover:underline"
+              title="Copy application link"
+              aria-label="Copy application link"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary-soft"
             >
-              Copy link
+              <LinkIcon className="h-4 w-4" />
             </button>
           )}
           <Link
             to={`/jobs/${job.job_id}/edit`}
-            className="text-body text-primary hover:underline"
+            onClick={(e) => e.stopPropagation()}
+            title="View / edit job"
+            aria-label="View / edit job"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary-soft"
           >
-            View / Edit
+            <PencilIcon className="h-4 w-4" />
           </Link>
           <button
             type="button"
@@ -173,6 +209,7 @@ export function Jobs() {
         <EmptyState
           title="No jobs yet"
           description="Use “+ Post new job” above to start collecting applications."
+          icon={<BriefcaseIcon />}
         />
       ) : (
         <div className="flex flex-col gap-4">

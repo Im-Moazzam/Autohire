@@ -9,6 +9,7 @@ import { Templates } from "./pages/Templates";
 import { TemplateBuilder } from "./pages/TemplateBuilder";
 import { Jobs } from "./pages/Jobs";
 import { JobBuilder } from "./pages/JobBuilder";
+import { Candidates } from "./pages/Candidates";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
       { path: "/jobs", element: <Jobs /> },
       { path: "/jobs/new", element: <JobBuilder /> },
       { path: "/jobs/:jobId/edit", element: <JobBuilder /> },
+      { path: "/jobs/:jobId/candidates", element: <Candidates /> },
     ],
   },
   {
