@@ -111,3 +111,27 @@ export function TrashIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M19 12H5M12 19l-7-7 7-7" />
+    </svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+export function XIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  );
+}
