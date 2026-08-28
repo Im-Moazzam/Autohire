@@ -137,8 +137,16 @@ duplicates (`UNIQUE` on `candidate_id`, upserted).
 
 **No close action endpoint.** Closing a job is `PATCH /jobs/{id}` with
 `{"status": "CLOSED"}` (P3) — it is a state change on one addressable resource, not a
-batch/async operation. Legal transition graph: `DRAFT -> LIVE -> CLOSED -> PROCESSED`.
-Any other transition, including skipping a state, is 409 `INVALID_STATE_TRANSITION`.
+batch/async operation. Legal transition graph: `DRAFT -> LIVE -> CLOSED -> {PROCESSED,
+LIVE}`. `CLOSED -> LIVE` ("reopen") is the one back-edge — added so a recruiter can
+extend a deadline and start accepting applications again without recreating the job.
+It deliberately excludes `PROCESSED -> LIVE`: a processed job already has
+ranked/invited/scheduled candidates, and mixing those with a fresh applicant pool
+needs a re-ranking story of its own (not built). Any other transition, including
+skipping a state, is 409 `INVALID_STATE_TRANSITION`. Reopening also 409s
+(`REOPEN_REQUIRES_FUTURE_EXPIRY`) if the `expires_at` that would be live after the
+call — the payload's if provided, else the job's existing one — is not in the
+future, so a job can never come back `LIVE` already expired.
 
 **Retrying a failed launch is also `PATCH`.** `POST /jobs` commits the row as `DRAFT`
 before the resume-folder call; if that call fails, the row stays `DRAFT` and the

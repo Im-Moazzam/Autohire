@@ -145,7 +145,8 @@ replaces `google_form_url`. Use a random 16-char token, not the UUID, so job IDs
 are not enumerable by candidates.
 
 `status` and `is_accepting_responses` interact: `status` is the lifecycle
-(`DRAFT -> LIVE -> CLOSED -> PROCESSED`, see `docs/api-contract.md` § Jobs);
+(`DRAFT -> LIVE -> CLOSED -> {PROCESSED, LIVE}`, `CLOSED -> LIVE` being a reopen with
+an extended `expires_at`; see `docs/api-contract.md` § Jobs);
 `is_accepting_responses` is a pause/resume toggle within `LIVE` only. Applications
 are accepted iff `status == LIVE AND is_accepting_responses AND now < expires_at` —
 all three conditions, not either field alone. This was previously ambiguous here;
