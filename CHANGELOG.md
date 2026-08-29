@@ -38,6 +38,21 @@
   opens independently instead of also triggering the row click.
 
 ### Added
+- Recruiter dashboard (TS-10): a real-time overview screen replacing the
+  placeholder stub. New `GET /api/v1/dashboard/stats` endpoint
+  (`dashboard_service.get_dashboard_stats`) returns recruiter-scoped totals
+  and a zero-filled per-status breakdown for jobs, candidates (joined
+  through the recruiter's own job postings, since candidates carry no
+  direct `recruiter_id`), interviews, and emails — tenant-isolated and
+  covered by 6 new tests including a cross-recruiter isolation check.
+  Frontend polls it every 30s. New `recharts` + `framer-motion` dependencies
+  (React 19–compatible) power an animated KPI row (`AnimatedNumber`
+  count-up, respecting `prefers-reduced-motion`), a donut chart per
+  categorical breakdown (`DonutChart`/`DonutLegend`), and an ordered
+  horizontal bar chart for the candidate pipeline (`FunnelBarChart`) — all
+  colors sourced from design tokens (`var(--color-x)`), never raw hex.
+  Covers all five UX states: skeleton loading, error with retry, an empty
+  state with a "post your first job" CTA, and the populated view.
 - Dev tooling: `mise run db:seed-demo` (`backend/app/scripts/seed_demo.py`) rebuilds a
   full demo world — recruiter, templates, jobs across every status, candidates across
   every submission status, rankings, interview slots, email logs — built from real resumes
