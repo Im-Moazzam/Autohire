@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Fixed
+- Candidate status actions, two direct UX fixes: (1) an `INVITED` candidate
+  no longer shows a "Mark Rejected" button next to an invite that's already
+  gone out — a same-card reject read as contradictory. Shows a
+  non-actionable green "Invite sent for interview" confirmation instead.
+  (2) "Undo rejection" now uses a distinct amber `warning` button variant
+  (new on the shared `Button` component) with a dedicated undo icon
+  (`RotateCcwIcon`), instead of looking identical to a generic "Mark X"
+  primary-blue action.
 - "Undo rejection" always landed on `PARSED`, hardcoded regardless of what
   the candidate's status actually was before rejection — a candidate
   rejected while the job was still `LIVE` (never closed or processed, so

@@ -113,6 +113,15 @@ export function VideoIcon(props: IconProps) {
   );
 }
 
+export function RotateCcwIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 12a9 9 0 1 0 2.64-6.36L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
 export function LockIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

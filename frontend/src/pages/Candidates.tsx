@@ -18,6 +18,7 @@ import {
   CheckIcon,
   FileTextIcon,
   LockIcon,
+  RotateCcwIcon,
   SparklesIcon,
   UsersIcon,
   XIcon,
@@ -113,6 +114,17 @@ function StatusActions({
   const updateStatus = useUpdateCandidateStatus(jobId);
   const options = nextStatusOptions(current, restorableStatus);
 
+  // Once an invite is out, a same-card reject reads as contradictory —
+  // show the real, already-happened outcome instead of another action.
+  if (current === "INVITED") {
+    return (
+      <div className="flex h-11 flex-1 items-center justify-center gap-2 rounded-control bg-success/10 px-4 text-body font-semibold text-success">
+        <CheckIcon className="h-4 w-4" />
+        Invite sent for interview
+      </div>
+    );
+  }
+
   if (options.length === 0) return null;
 
   function act(status: SubmissionStatus) {
@@ -137,6 +149,8 @@ function StatusActions({
     );
   }
 
+  const isUndo = current === "REJECTED";
+
   return (
     <div className="flex gap-3">
       {options.map((status) => (
@@ -146,12 +160,18 @@ function StatusActions({
           disabled={updateStatus.isPending}
           onClick={() => act(status)}
           className={buttonClassName({
-            variant: status === "REJECTED" ? "destructive" : "primary",
+            variant: isUndo
+              ? "warning"
+              : status === "REJECTED"
+                ? "destructive"
+                : "primary",
             className:
               "flex-1 h-11 gap-2 disabled:opacity-40 hover:-translate-y-px hover:shadow-card transition-transform",
           })}
         >
-          {status === "REJECTED" ? (
+          {isUndo ? (
+            <RotateCcwIcon className="h-4 w-4" />
+          ) : status === "REJECTED" ? (
             <XIcon className="h-4 w-4" />
           ) : (
             <CheckIcon className="h-4 w-4" />
