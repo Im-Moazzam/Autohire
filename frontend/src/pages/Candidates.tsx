@@ -526,7 +526,9 @@ export function Candidates() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-page font-semibold">
-              {job.isLoading ? "Loading…" : job.data?.job_title ?? "Candidates"}
+              {job.isLoading
+                ? "Loading…"
+                : (job.data?.job_title ?? "Candidates")}
             </h1>
             {job.data && (
               <StatusBadge status={JOB_STATUS_LABELS[job.data.status]} />
