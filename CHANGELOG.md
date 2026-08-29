@@ -165,6 +165,28 @@
     cost of a full Docker build.
 
 ### Added
+- US-24/US-26/US-27: Scheduling and Emails screens (frontend) — the last
+  two backend-ready screens with no UI. New `/scheduling` route: an
+  availability form (`GET`/`PUT /scheduling/preferences` — days, hours,
+  slot length) plus a real interview list (`GET /interviews`, filterable by
+  job/status, with a working Meet link per row). New `/emails` route: a
+  read-only delivery log (`GET /emails`, filterable by job/type) for
+  automated candidate emails. Both wired into the sidebar, which previously
+  had them permanently disabled ("Coming soon").
+- The Candidates screen's "Mark Interview Invited" button was a bare status
+  PATCH — no calendar event, no email, nothing real, despite Moazzam's
+  US-26/US-27 backend already existing to do exactly that. Replaced it with
+  a real **"Schedule interview"** action (on both the ranked card and the
+  candidate detail modal) that calls `POST /interviews`, polls the returned
+  `CALENDAR_SYNC` task the same way "Run AI ranking" does, and reports the
+  outcome from the task's `result_summary` (`scheduled`/`unscheduled` with a
+  reason, e.g. "no available slot in the next 14 days — check your
+  availability"). `nextStatusOptions` no longer offers a direct
+  `RANKED -> INVITED` PATCH — scheduling a real interview is the only path
+  now, so the UI can't imply one happened when it didn't. Verified against
+  the real backend end-to-end: a scheduled candidate produces a real
+  Calendar event (Meet link), a real Gmail invite logged in `email_logs`,
+  and shows up in both new screens.
 - Templates and Apply pick up the shared icon set introduced alongside the
   Candidates screen: Templates' table Edit/Delete actions are now icon-only
   buttons (pencil, trash) with hover tooltips instead of plain text links,

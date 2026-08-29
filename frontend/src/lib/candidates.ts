@@ -39,7 +39,11 @@ const LEGAL_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   SUBMITTED: ["REJECTED"],
   PARSE_ERROR: ["REJECTED"],
   PARSED: ["REJECTED"],
-  RANKED: ["INVITED", "REJECTED"],
+  // No "INVITED" here: scheduling a real interview must go through
+  // POST /interviews (creates a real Calendar event + sends the invite
+  // email) — see the dedicated "Schedule interview" action, not a bare
+  // status PATCH that would silently fake having scheduled anything.
+  RANKED: ["REJECTED"],
   INVITED: ["REJECTED"],
   RESCHEDULED: ["REJECTED"],
   CONFIRMED: [],

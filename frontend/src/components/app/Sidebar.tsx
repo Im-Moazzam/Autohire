@@ -150,8 +150,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Templates", to: "/templates", icon: FileTextIcon },
   { label: "Jobs", to: "/jobs", icon: BriefcaseIcon },
   { label: "Candidates", icon: UsersIcon },
-  { label: "Scheduling", icon: CalendarIcon },
-  { label: "Emails", icon: MailIcon },
+  { label: "Scheduling", to: "/scheduling", icon: CalendarIcon },
+  { label: "Emails", to: "/emails", icon: MailIcon },
   { label: "Settings", icon: GearIcon },
   { label: "Admin Monitoring", icon: ActivityIcon },
 ];

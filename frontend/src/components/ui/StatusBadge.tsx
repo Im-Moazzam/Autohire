@@ -17,6 +17,9 @@ export type Status =
   | "Rejected"
   | "Failed"
   | "Parse Error"
+  | "Cancelled"
+  | "Sent"
+  | "Delivery Pending"
   | "Connected"
   | "Disconnected"
   | "Syncing"
@@ -43,6 +46,9 @@ const statusTone: Record<Status, Tone> = {
   Rejected: "error",
   Failed: "error",
   "Parse Error": "error",
+  Cancelled: "muted",
+  Sent: "success",
+  "Delivery Pending": "muted",
   Connected: "success",
   Disconnected: "muted",
   Syncing: "ai",

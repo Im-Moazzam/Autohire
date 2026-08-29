@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
   DataTable,
@@ -13,6 +14,7 @@ import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import {
   ArrowLeftIcon,
+  CalendarIcon,
   CheckIcon,
   FileTextIcon,
   LockIcon,
@@ -20,8 +22,9 @@ import {
   UsersIcon,
   XIcon,
 } from "../components/ui/icons";
-import { apiErrorMessage } from "../lib/http";
+import { apiErrorCode, apiErrorMessage } from "../lib/http";
 import { JOB_STATUS_LABELS, useJob, useTriggerRank } from "../lib/jobs";
+import { useScheduleInterviews } from "../lib/scheduling";
 import { useTask } from "../lib/tasks";
 import {
   nextStatusOptions,
@@ -36,6 +39,16 @@ import {
   type RankedCandidate,
   type SubmissionStatus,
 } from "../lib/candidates";
+
+const UNSCHEDULED_REASONS: Record<string, string> = {
+  NO_SLOT_IN_HORIZON:
+    "No available slot in the next 14 days — check your interview availability in Scheduling.",
+  ALREADY_SCHEDULED: "This candidate already has an interview scheduled.",
+  SLOT_TIME_TAKEN: "That time was just taken — try again.",
+  CALENDAR_FAILED: "Couldn't create the calendar event. Try again.",
+  NOT_RANKED: "This candidate is no longer ranked.",
+  CANDIDATE_NOT_FOUND: "Candidate not found.",
+};
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -147,6 +160,107 @@ function StatusActions({
   );
 }
 
+/** The real scheduling action for a RANKED candidate: POST /interviews (a
+ * real Calendar event + invite email), not a bare status PATCH. Polls the
+ * returned task the same way "Run AI ranking" does. */
+function ScheduleInterviewButton({
+  candidateId,
+  jobId,
+}: {
+  candidateId: string;
+  jobId: string | undefined;
+}) {
+  const { showToast, dismissToast } = useToast();
+  const queryClient = useQueryClient();
+  const scheduleInterviews = useScheduleInterviews();
+  const [taskId, setTaskId] = useState<string | undefined>();
+  const toastIdRef = useRef<number | null>(null);
+  const task = useTask(taskId);
+
+  useEffect(() => {
+    if (!taskId || !task.data) return;
+    if (task.data.status !== "SUCCESS" && task.data.status !== "FAILED") return;
+
+    setTaskId(undefined);
+    if (toastIdRef.current !== null) dismissToast(toastIdRef.current);
+    queryClient.invalidateQueries({ queryKey: ["candidates", jobId] });
+    queryClient.invalidateQueries({
+      queryKey: ["candidates", "detail", candidateId],
+    });
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+
+    if (task.data.status === "FAILED") {
+      showToast(
+        task.data.error_message ?? "Couldn't schedule an interview.",
+        "error",
+      );
+      return;
+    }
+
+    const summary = task.data.result_summary as {
+      scheduled: number;
+      unscheduled: { reason: string }[];
+    } | null;
+    if (summary?.scheduled) {
+      showToast("Interview scheduled — invite sent.", "success");
+    } else {
+      const reason = summary?.unscheduled[0]?.reason;
+      showToast(
+        (reason && UNSCHEDULED_REASONS[reason]) ??
+          "Couldn't schedule an interview.",
+        "error",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.data?.status]);
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!jobId) return;
+    scheduleInterviews.mutate(
+      { job_id: jobId, candidate_ids: [candidateId] },
+      {
+        onSuccess: (t) => {
+          setTaskId(t.task_id);
+          toastIdRef.current = showToast("Scheduling interview…", "loading");
+        },
+        onError: (err) => {
+          const message =
+            apiErrorCode(err) === "NO_SCHEDULING_PREFERENCES"
+              ? "Set your interview availability in Scheduling first."
+              : apiErrorMessage(err, "Couldn't schedule an interview.");
+          showToast(message, "error");
+        },
+      },
+    );
+  }
+
+  const isBusy = scheduleInterviews.isPending || !!taskId;
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isBusy}
+      className={buttonClassName({
+        variant: "primary",
+        className:
+          "flex-1 h-11 gap-2 disabled:opacity-40 hover:-translate-y-px hover:shadow-card transition-transform",
+      })}
+    >
+      {isBusy ? (
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      ) : (
+        <CalendarIcon className="h-4 w-4" />
+      )}
+      {isBusy ? "Scheduling…" : "Schedule interview"}
+    </button>
+  );
+}
+
 function CandidateDetailModal({
   candidateId,
   jobId,
@@ -173,14 +287,24 @@ function CandidateDetailModal({
       size="lg"
       errorText={statusError}
       footer={
-        data && nextStatusOptions(data.submission_status).length > 0 ? (
-          <StatusActions
-            candidateId={data.candidate_id}
-            current={data.submission_status}
-            jobId={jobId}
-            onDone={onClose}
-            onError={setStatusError}
-          />
+        data &&
+        (data.submission_status === "RANKED" ||
+          nextStatusOptions(data.submission_status).length > 0) ? (
+          <div className="flex gap-3">
+            {data.submission_status === "RANKED" && (
+              <ScheduleInterviewButton
+                candidateId={data.candidate_id}
+                jobId={jobId}
+              />
+            )}
+            <StatusActions
+              candidateId={data.candidate_id}
+              current={data.submission_status}
+              jobId={jobId}
+              onDone={onClose}
+              onError={setStatusError}
+            />
+          </div>
         ) : undefined
       }
     >
@@ -315,7 +439,13 @@ function RankedCard({
         </div>
       )}
 
-      <div onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} className="flex gap-3">
+        {candidate.submission_status === "RANKED" && (
+          <ScheduleInterviewButton
+            candidateId={candidate.candidate_id}
+            jobId={jobId}
+          />
+        )}
         <StatusActions
           candidateId={candidate.candidate_id}
           current={candidate.submission_status}
