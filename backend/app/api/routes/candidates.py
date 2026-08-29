@@ -38,7 +38,7 @@ _MIME_BY_EXT = {
 }
 
 
-def _to_candidate_out(candidate: Candidate) -> CandidateOut:
+def _to_candidate_out(candidate: Candidate, has_ranking: bool) -> CandidateOut:
     return CandidateOut(
         candidate_id=candidate.candidate_id,
         full_name=candidate.full_name,
@@ -48,11 +48,14 @@ def _to_candidate_out(candidate: Candidate) -> CandidateOut:
         submitted_at=candidate.submitted_at,
         parse_error=candidate.parse_error,
         resume_url=candidate_service.resume_url_for(candidate),
+        restorable_status=candidate_service.compute_restorable_status(candidate, has_ranking),
     )
 
 
 def _to_ranked_out(candidate: Candidate, analysis: AiAnalysisResult) -> RankedCandidateOut:
-    base = _to_candidate_out(candidate)
+    # The ranked list is an INNER JOIN against ai_analysis_results — every row
+    # here has a ranking by construction.
+    base = _to_candidate_out(candidate, has_ranking=True)
     return RankedCandidateOut(
         **base.model_dump(),
         rank_position=analysis.rank_position,
@@ -64,7 +67,8 @@ def _to_ranked_out(candidate: Candidate, analysis: AiAnalysisResult) -> RankedCa
 
 
 def _to_detail_out(db: Session, candidate: Candidate) -> CandidateDetailOut:
-    base = _to_candidate_out(candidate)
+    has_ranking = candidate_service.ranking_exists(db, candidate.candidate_id)
+    base = _to_candidate_out(candidate, has_ranking)
     return CandidateDetailOut(
         **base.model_dump(),
         form_responses=candidate_service.form_responses(db, candidate.candidate_id),
@@ -86,8 +90,9 @@ def list_candidates(
     candidates, total = candidate_service.list_candidates(
         db, job.job_id, params, submission_status, q
     )
+    ranking_map = candidate_service.ranking_exists_map(db, [c.candidate_id for c in candidates])
     return Page[CandidateOut](
-        items=[_to_candidate_out(c) for c in candidates],
+        items=[_to_candidate_out(c, ranking_map.get(c.candidate_id, False)) for c in candidates],
         total=total,
         page=params.page,
         size=params.size,

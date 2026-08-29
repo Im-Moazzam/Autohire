@@ -92,12 +92,15 @@ function ResumeLink({ url }: { url: string | null | undefined }) {
 function StatusActions({
   candidateId,
   current,
+  restorableStatus,
   jobId,
   onDone,
   onError,
 }: {
   candidateId: string;
   current: SubmissionStatus;
+  /** Only meaningful when current === "REJECTED" — see nextStatusOptions. */
+  restorableStatus?: SubmissionStatus;
   jobId: string | undefined;
   onDone?: () => void;
   /** Defaults to a toast. Pass this when rendering inside an open <dialog> —
@@ -108,7 +111,7 @@ function StatusActions({
 }) {
   const { showToast } = useToast();
   const updateStatus = useUpdateCandidateStatus(jobId);
-  const options = nextStatusOptions(current);
+  const options = nextStatusOptions(current, restorableStatus);
 
   if (options.length === 0) return null;
 
@@ -118,7 +121,7 @@ function StatusActions({
       {
         onSuccess: () => {
           showToast(
-            current === "REJECTED" && status === "PARSED"
+            current === "REJECTED"
               ? "Rejection undone."
               : `Marked as ${SUBMISSION_STATUS_LABELS[status]}.`,
             "success",
@@ -289,7 +292,8 @@ function CandidateDetailModal({
       footer={
         data &&
         (data.submission_status === "RANKED" ||
-          nextStatusOptions(data.submission_status).length > 0) ? (
+          nextStatusOptions(data.submission_status, data.restorable_status)
+            .length > 0) ? (
           <div className="flex gap-3">
             {data.submission_status === "RANKED" && (
               <ScheduleInterviewButton
@@ -300,6 +304,7 @@ function CandidateDetailModal({
             <StatusActions
               candidateId={data.candidate_id}
               current={data.submission_status}
+              restorableStatus={data.restorable_status}
               jobId={jobId}
               onDone={onClose}
               onError={setStatusError}
@@ -449,6 +454,7 @@ function RankedCard({
         <StatusActions
           candidateId={candidate.candidate_id}
           current={candidate.submission_status}
+          restorableStatus={candidate.restorable_status}
           jobId={jobId}
         />
       </div>
@@ -616,14 +622,10 @@ export function Candidates() {
                 key: "full_name",
                 header: "Applicant",
                 render: (c) => (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(c.candidate_id)}
-                    className="text-left hover:underline"
-                  >
+                  <div>
                     <div className="font-medium text-ink">{c.full_name}</div>
                     <div className="text-helper text-muted">{c.email}</div>
-                  </button>
+                  </div>
                 ),
               },
               {
@@ -643,11 +645,16 @@ export function Candidates() {
               {
                 key: "resume",
                 header: "Resume",
-                render: (c) => <ResumeLink url={c.resume_url} />,
+                render: (c) => (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <ResumeLink url={c.resume_url} />
+                  </span>
+                ),
               },
             ]}
             rows={candidates.data?.items ?? []}
             rowKey={(c) => c.candidate_id}
+            onRowClick={(c) => setSelectedId(c.candidate_id)}
             isLoading={candidates.isLoading}
             errorText={
               candidates.isError

@@ -535,6 +535,7 @@ export interface components {
             parse_error: string | null;
             /** Resume Url */
             resume_url: string | null;
+            restorable_status: components["schemas"]["SubmissionStatus"];
             /** Form Responses */
             form_responses: components["schemas"]["FormResponseOut"][];
         };
@@ -561,6 +562,7 @@ export interface components {
             parse_error: string | null;
             /** Resume Url */
             resume_url: string | null;
+            restorable_status: components["schemas"]["SubmissionStatus"];
         };
         /** CandidateUpdate */
         CandidateUpdate: {
@@ -938,6 +940,7 @@ export interface components {
             parse_error: string | null;
             /** Resume Url */
             resume_url: string | null;
+            restorable_status: components["schemas"]["SubmissionStatus"];
             /** Rank Position */
             rank_position: number;
             /** Semantic Score */

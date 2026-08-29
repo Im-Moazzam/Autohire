@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+### Fixed
+- "Undo rejection" always landed on `PARSED`, hardcoded regardless of what
+  the candidate's status actually was before rejection — a candidate
+  rejected while the job was still `LIVE` (never closed or processed, so
+  genuinely still `SUBMITTED`) came back showing `Parsed`, a parse that
+  never ran. The same bug would have shown `Parsed` instead of `Ranked` for
+  a candidate rejected *after* being ranked, silently losing their
+  "Schedule interview" action on undo. `candidate_service` gains
+  `compute_restorable_status(candidate, has_ranking)`, deriving the real
+  prior status from data that already exists — an `ai_analysis_results` row
+  means `RANKED`, a `parse_error` means `PARSE_ERROR`, a populated
+  `resume_text` means `PARSED`, otherwise `SUBMITTED` — exposed as
+  `restorable_status` on `CandidateOut` (batched via a new
+  `ranking_exists_map`, one query for the whole page, never N+1).
+  `_LEGAL_TRANSITIONS[REJECTED]` widened from `{PARSED}` to
+  `{SUBMITTED, PARSED, PARSE_ERROR, RANKED}` to make the four real targets
+  legal. Frontend: `nextStatusOptions`/`statusActionLabel` no longer
+  hardcode `PARSED` for the undo edge — they use `restorable_status` from
+  the API, still bordered as "Undo rejection" no matter which of the four
+  it resolves to. See `docs/drift.md` row 71.
+- Clicking anywhere on an "All submissions" table row now opens the
+  candidate detail modal — previously only the name/email text itself was
+  clickable, everything else in the row did nothing. `DataTable` gained a
+  reusable `onRowClick` prop (Templates' non-clickable rows are unaffected,
+  since it's optional); the resume-link cell stops propagation so it still
+  opens independently instead of also triggering the row click.
+
 ### Added
 - Dev tooling: `mise run db:seed-demo` (`backend/app/scripts/seed_demo.py`) rebuilds a
   full demo world — recruiter, templates, jobs across every status, candidates across

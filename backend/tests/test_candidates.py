@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.main import app
+from app.models.ai_analysis_result import AiAnalysisResult
 from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.recruiter import Recruiter
 from app.services.auth_service import SESSION_COOKIE, create_session_cookie
@@ -99,6 +100,7 @@ def _add_candidate(
     parse_error: str | None = None,
     deleted: bool = False,
     resume_storage_key: str | None = None,
+    resume_text: str | None = None,
 ) -> Candidate:
     candidate = Candidate(
         job_id=job_id,
@@ -109,6 +111,7 @@ def _add_candidate(
         parse_error=parse_error,
         deleted_at=datetime.now(UTC) if deleted else None,
         resume_storage_key=resume_storage_key,
+        resume_text=resume_text,
     )
     db_session.add(candidate)
     db_session.commit()
@@ -391,34 +394,123 @@ def test_patch_status_change_only(authed_client: TestClient, db_session: Session
     assert response.json()["submission_status"] == "REJECTED"
 
 
-def test_patch_undo_rejection_back_to_parsed(
+def test_restorable_status_submitted_when_never_processed(
     authed_client: TestClient, db_session: Session
 ) -> None:
-    """Lands on PARSED, not RANKED — list_ranked_candidates INNER JOINs
-    ai_analysis_results, so a RANKED status with no analysis row would be a
-    candidate the ranked list can never actually show."""
+    """A job still LIVE (never closed/processed) can only ever produce
+    SUBMITTED candidates — undoing a rejection must land back on SUBMITTED,
+    not silently upgrade to PARSED just because that used to be the only
+    legal target."""
     template = _create_template(authed_client)
     job = _create_job(authed_client, template["template_id"])
     candidate = _add_candidate(
         db_session,
         uuid.UUID(job["job_id"]),
-        "reconsidered@example.com",
+        "never-processed@example.com",
         submission_status="REJECTED",
     )
 
-    response = authed_client.patch(
-        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "PARSED"}
+    get_response = authed_client.get(f"/api/v1/candidates/{candidate.candidate_id}")
+    assert get_response.json()["restorable_status"] == "SUBMITTED"
+
+    patch_response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "SUBMITTED"}
     )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["submission_status"] == "SUBMITTED"
+
+
+def test_restorable_status_parsed_when_resume_parsed_but_not_ranked(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "parsed-not-ranked@example.com",
+        submission_status="REJECTED",
+        resume_text="Experienced backend engineer...",
+    )
+
+    response = authed_client.get(f"/api/v1/candidates/{candidate.candidate_id}")
+    assert response.json()["restorable_status"] == "PARSED"
+
+
+def test_restorable_status_ranked_when_analysis_row_exists(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """A candidate rejected after being ranked keeps their real
+    ai_analysis_results row — undoing must restore RANKED, not PARSED,
+    so "Schedule interview" reappears instead of a re-rank being required."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "ranked-then-rejected@example.com",
+        submission_status="REJECTED",
+        resume_text="Experienced backend engineer...",
+    )
+    db_session.add(
+        AiAnalysisResult(
+            candidate_id=candidate.candidate_id,
+            job_id=uuid.UUID(job["job_id"]),
+            semantic_score=0.82,
+            rank_position=1,
+        )
+    )
+    db_session.commit()
+
+    get_response = authed_client.get(f"/api/v1/candidates/{candidate.candidate_id}")
+    assert get_response.json()["restorable_status"] == "RANKED"
+
+    patch_response = authed_client.patch(
+        f"/api/v1/candidates/{candidate.candidate_id}", json={"submission_status": "RANKED"}
+    )
+    assert patch_response.status_code == 200
+    assert patch_response.json()["submission_status"] == "RANKED"
+
+
+def test_restorable_status_parse_error_when_parse_failed(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    candidate = _add_candidate(
+        db_session,
+        uuid.UUID(job["job_id"]),
+        "parse-failed@example.com",
+        submission_status="REJECTED",
+        parse_error="Scanned image, no extractable text.",
+    )
+
+    response = authed_client.get(f"/api/v1/candidates/{candidate.candidate_id}")
+    assert response.json()["restorable_status"] == "PARSE_ERROR"
+
+
+def test_list_candidates_includes_restorable_status(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """The list endpoint computes restorable_status via a single batched
+    query (ranking_exists_map), never N+1 over the page."""
+    template = _create_template(authed_client)
+    job = _create_job(authed_client, template["template_id"])
+    _add_candidate(
+        db_session, uuid.UUID(job["job_id"]), "listed@example.com", submission_status="REJECTED"
+    )
+
+    response = authed_client.get(f"/api/v1/jobs/{job['job_id']}/candidates")
     assert response.status_code == 200
-    assert response.json()["submission_status"] == "PARSED"
+    assert response.json()["items"][0]["restorable_status"] == "SUBMITTED"
 
 
 def test_patch_reject_then_invite_is_invalid_without_undo_first(
     authed_client: TestClient, db_session: Session
 ) -> None:
-    """One obvious way back in: a rejected candidate must be undone (back to
-    PARSED) before they can be invited — no direct REJECTED -> INVITED
-    shortcut."""
+    """One obvious way back in: a rejected candidate must be undone (to
+    whatever compute_restorable_status derives) before they can be invited —
+    no direct REJECTED -> INVITED shortcut."""
     template = _create_template(authed_client)
     job = _create_job(authed_client, template["template_id"])
     candidate = _add_candidate(
