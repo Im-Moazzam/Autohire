@@ -6,10 +6,8 @@ import { BriefcaseIcon, LinkIcon, PencilIcon } from "../components/ui/icons";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorMessage } from "../lib/http";
 import {
-  canProcessJob,
   JOB_STATUS_LABELS,
   useJobs,
-  useTriggerProcess,
   type Job,
   type JobStatus,
 } from "../lib/jobs";
@@ -40,10 +38,8 @@ function daysLeftLabel(expiresAt: string): string {
 
 function JobCard({ job }: { job: Job }) {
   const { showToast } = useToast();
-  const triggerProcess = useTriggerProcess();
   const navigate = useNavigate();
 
-  const process = canProcessJob(job);
   const canShare = job.status !== "DRAFT";
   // Nowhere useful to land on a DRAFT job's candidates page — it can't have
   // any yet — so the card itself only becomes clickable once the job is live
@@ -52,15 +48,6 @@ function JobCard({ job }: { job: Job }) {
 
   function openCandidates() {
     if (canOpenCandidates) navigate(`/jobs/${job.job_id}/candidates`);
-  }
-
-  function handleProcess(e: React.MouseEvent) {
-    e.stopPropagation();
-    triggerProcess.mutate(job.job_id, {
-      onSuccess: () => showToast("Resume processing started.", "success"),
-      onError: (err) =>
-        showToast(apiErrorMessage(err, "Couldn't start processing."), "error"),
-    });
   }
 
   async function handleCopyLink(e: React.MouseEvent) {
@@ -130,17 +117,6 @@ function JobCard({ job }: { job: Job }) {
           >
             <PencilIcon className="h-4 w-4" />
           </Link>
-          <button
-            type="button"
-            onClick={handleProcess}
-            disabled={!process.allowed || triggerProcess.isPending}
-            title={process.allowed ? undefined : process.reason}
-            className={buttonClassName({
-              className: "px-4 py-2 text-table disabled:opacity-40",
-            })}
-          >
-            {triggerProcess.isPending ? "Starting…" : "AI process"}
-          </button>
         </div>
       </div>
     </div>

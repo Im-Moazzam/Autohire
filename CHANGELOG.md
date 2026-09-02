@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Changed
+- Collapsed the two separate AI-pipeline triggers into one. The Jobs list's
+  "AI process" button is gone; the Candidates screen's action is now "Rank
+  candidates" and runs both stages back to back — parse resumes, then rank
+  them — with a spinner label that switches ("Parsing resumes…" ->
+  "Ranking…") instead of two separate manual clicks on two separate screens.
+  Both backend endpoints/tasks (`POST /jobs/{id}/process`,
+  `POST /jobs/{id}/rank`) are unchanged; a `PARSE_ERROR` candidate is already
+  skipped by the ranking query, so partial-failure handling needed no new
+  code. `canProcessJob` (`frontend/src/lib/jobs.ts`) also now accepts a
+  `PROCESSED` job, matching the backend guard — a repeat click on an
+  already-ranked job stays a cheap re-rank (parsing is a no-op for
+  already-`PARSED` candidates) rather than being wrongly blocked. See
+  `docs/drift.md` row 72.
+
 ### Fixed
 - Emails and Scheduling lists silently truncated at 100 rows with no way to
   see the rest — `useEmails`/`useInterviews` fetched a single fixed
