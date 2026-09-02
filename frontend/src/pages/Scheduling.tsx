@@ -4,6 +4,7 @@ import {
   Card,
   DataTable,
   Input,
+  Pagination,
   Select,
   StatusBadge,
 } from "../components/ui";
@@ -12,6 +13,7 @@ import { useToast } from "../components/ui/Toast";
 import { apiErrorMessage } from "../lib/http";
 import { useJobs } from "../lib/jobs";
 import {
+  INTERVIEWS_PAGE_SIZE,
   SLOT_STATUS_LABELS,
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
@@ -202,11 +204,13 @@ function AvailabilityForm() {
 export function Scheduling() {
   const [jobFilter, setJobFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<SlotStatus | "">("");
+  const [page, setPage] = useState(1);
 
   const jobs = useJobs({});
   const interviews = useInterviews({
     job_id: jobFilter || undefined,
     status: statusFilter || undefined,
+    page,
   });
 
   const jobTitleById = useMemo(
@@ -244,14 +248,20 @@ export function Scheduling() {
             label="Job"
             options={jobOptions}
             value={jobFilter}
-            onChange={(e) => setJobFilter(e.target.value)}
+            onChange={(e) => {
+              setJobFilter(e.target.value);
+              setPage(1);
+            }}
             className="w-64"
           />
           <Select
             label="Status"
             options={STATUS_OPTIONS}
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as SlotStatus | "")}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as SlotStatus | "");
+              setPage(1);
+            }}
             className="w-52"
           />
         </div>
@@ -313,6 +323,15 @@ export function Scheduling() {
           emptyDescription="Schedule interviews for ranked candidates from a job's Candidates screen."
           emptyIcon={<CalendarIcon />}
         />
+
+        {interviews.data && (
+          <Pagination
+            page={page}
+            size={INTERVIEWS_PAGE_SIZE}
+            total={interviews.data.total}
+            onPageChange={setPage}
+          />
+        )}
       </div>
     </div>
   );
