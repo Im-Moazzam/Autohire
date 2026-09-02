@@ -36,13 +36,15 @@ export function expiresAtToDateInput(iso: string): string {
   return new Date(iso).toLocaleDateString("en-CA");
 }
 
-/** Mirrors task_service.enqueue_resume_parse's guard exactly (TS-06/R-01):
- * the backend only accepts a CLOSED job with at least one candidate. */
+/** Mirrors task_service.enqueue_resume_parse's guard exactly: the backend
+ * accepts a CLOSED or PROCESSED job (re-running is how a recruiter re-parses
+ * new/failed resumes and re-ranks after editing the job description) with at
+ * least one candidate. */
 export function canProcessJob(job: Pick<Job, "status" | "submission_count">): {
   allowed: boolean;
   reason?: string;
 } {
-  if (job.status !== "CLOSED") {
+  if (job.status !== "CLOSED" && job.status !== "PROCESSED") {
     return { allowed: false, reason: "Only closed jobs can be processed" };
   }
   if (job.submission_count === 0) {
@@ -104,7 +106,7 @@ export function useUpdateJob(jobId: string) {
 
 export function useTriggerProcess() {
   return useMutation({
-    mutationFn: (jobId: string) => api.post(`/jobs/${jobId}/process`),
+    mutationFn: (jobId: string) => api.post<Task>(`/jobs/${jobId}/process`),
   });
 }
 

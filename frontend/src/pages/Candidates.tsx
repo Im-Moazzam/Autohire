@@ -24,7 +24,13 @@ import {
   XIcon,
 } from "../components/ui/icons";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
-import { JOB_STATUS_LABELS, useJob, useTriggerRank } from "../lib/jobs";
+import {
+  canProcessJob,
+  JOB_STATUS_LABELS,
+  useJob,
+  useTriggerProcess,
+  useTriggerRank,
+} from "../lib/jobs";
 import { useScheduleInterviews } from "../lib/scheduling";
 import { useTask } from "../lib/tasks";
 import {
@@ -185,7 +191,7 @@ function StatusActions({
 
 /** The real scheduling action for a RANKED candidate: POST /interviews (a
  * real Calendar event + invite email), not a bare status PATCH. Polls the
- * returned task the same way "Run AI ranking" does. */
+ * returned task the same way "Rank candidates" does. */
 function ScheduleInterviewButton({
   candidateId,
   jobId,
@@ -489,10 +495,11 @@ export function Candidates() {
   const [status, setStatus] = useState<SubmissionStatus | "">("");
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [processTaskId, setProcessTaskId] = useState<string | undefined>();
   const [rankTaskId, setRankTaskId] = useState<string | undefined>();
   // "loading" toasts never auto-dismiss (Toast.tsx) — this one has to be
-  // explicitly cleared once the task reaches a terminal status.
-  const rankToastId = useRef<number | null>(null);
+  // explicitly cleared once the pipeline reaches a terminal state.
+  const pipelineToastId = useRef<number | null>(null);
 
   const job = useJob(jobId);
   const candidates = useCandidates(jobId, {
@@ -500,43 +507,99 @@ export function Candidates() {
     q: q || undefined,
   });
   const ranked = useRankedCandidates(tab === "ranked" ? jobId : undefined);
+  const triggerProcess = useTriggerProcess();
   const triggerRank = useTriggerRank();
+  const processTask = useTask(processTaskId);
   const rankTask = useTask(rankTaskId);
 
+  const isProcessing = processTask.data
+    ? !["SUCCESS", "FAILED", "RETRIED"].includes(processTask.data.status)
+    : !!processTaskId;
   const isRanking = rankTask.data
     ? !["SUCCESS", "FAILED", "RETRIED"].includes(rankTask.data.status)
     : false;
 
+  // Stage 1: parse resumes. On success, chain straight into stage 2
+  // (ranking) so "Rank candidates" reads as one action to the recruiter even
+  // though it's still two independent backend tasks under the hood — kept
+  // separate so a re-run only re-parses SUBMITTED/PARSE_ERROR candidates
+  // (resume_parse_job's own selection) instead of redoing already-PARSED
+  // ones every time.
+  useEffect(() => {
+    if (!processTaskId || !processTask.data) return;
+    if (processTask.data.status === "SUCCESS") {
+      setProcessTaskId(undefined);
+      if (!jobId) return;
+      triggerRank.mutate(jobId, {
+        onSuccess: (task) => setRankTaskId(task.task_id),
+        onError: (err) => {
+          if (pipelineToastId.current !== null) {
+            dismissToast(pipelineToastId.current);
+            pipelineToastId.current = null;
+          }
+          showToast(
+            apiErrorCode(err) === "NO_PARSED_CANDIDATES"
+              ? "No resumes could be parsed — nothing to rank."
+              : apiErrorMessage(err, "Couldn't start ranking."),
+            "error",
+          );
+        },
+      });
+    } else if (processTask.data.status === "FAILED") {
+      setProcessTaskId(undefined);
+      if (pipelineToastId.current !== null) {
+        dismissToast(pipelineToastId.current);
+        pipelineToastId.current = null;
+      }
+      showToast(
+        processTask.data.error_message ?? "Resume processing failed.",
+        "error",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processTask.data?.status]);
+
+  // Stage 2: rank the parsed candidates.
   useEffect(() => {
     if (!rankTaskId || !rankTask.data) return;
     if (rankTask.data.status === "SUCCESS") {
       setRankTaskId(undefined);
-      if (rankToastId.current !== null) dismissToast(rankToastId.current);
+      if (pipelineToastId.current !== null) {
+        dismissToast(pipelineToastId.current);
+        pipelineToastId.current = null;
+      }
       ranked.refetch();
       job.refetch();
       showToast("AI ranking complete.", "success");
     } else if (rankTask.data.status === "FAILED") {
       setRankTaskId(undefined);
-      if (rankToastId.current !== null) dismissToast(rankToastId.current);
+      if (pipelineToastId.current !== null) {
+        dismissToast(pipelineToastId.current);
+        pipelineToastId.current = null;
+      }
       showToast(rankTask.data.error_message ?? "AI ranking failed.", "error");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankTask.data?.status]);
 
-  function handleRank() {
+  function handleStartRanking() {
     if (!jobId) return;
-    triggerRank.mutate(jobId, {
+    triggerProcess.mutate(jobId, {
       onSuccess: (task) => {
-        setRankTaskId(task.task_id);
-        rankToastId.current = showToast("AI ranking started.", "loading");
+        setProcessTaskId(task.task_id);
+        pipelineToastId.current = showToast("Parsing resumes…", "loading");
       },
       onError: (err) =>
-        showToast(apiErrorMessage(err, "Couldn't start ranking."), "error"),
+        showToast(apiErrorMessage(err, "Couldn't start processing."), "error"),
     });
   }
 
-  const canRank =
-    job.data?.status === "CLOSED" || job.data?.status === "PROCESSED";
+  const process = job.data ? canProcessJob(job.data) : { allowed: false };
+  const isPipelineRunning =
+    triggerProcess.isPending ||
+    isProcessing ||
+    triggerRank.isPending ||
+    isRanking;
 
   return (
     <div className="flex flex-col gap-6">
@@ -552,9 +615,7 @@ export function Candidates() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-page font-semibold">
-              {job.isLoading
-                ? "Loading…"
-                : (job.data?.job_title ?? "Candidates")}
+              {job.isLoading ? "Loading…" : job.data?.job_title ?? "Candidates"}
             </h1>
             {job.data && (
               <StatusBadge status={JOB_STATUS_LABELS[job.data.status]} />
@@ -564,17 +625,17 @@ export function Candidates() {
             Review submissions and AI-ranked candidates for this job.
           </p>
         </div>
-        {canRank ? (
+        {process.allowed ? (
           <button
             type="button"
-            onClick={handleRank}
-            disabled={triggerRank.isPending || isRanking}
+            onClick={handleStartRanking}
+            disabled={isPipelineRunning}
             className={buttonClassName({
               variant: "primary",
               className: "gap-2 disabled:opacity-40",
             })}
           >
-            {isRanking || triggerRank.isPending ? (
+            {isPipelineRunning ? (
               <span
                 className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
                 aria-hidden="true"
@@ -582,17 +643,23 @@ export function Candidates() {
             ) : (
               <SparklesIcon className="h-4 w-4" />
             )}
-            {isRanking || triggerRank.isPending ? "Ranking…" : "Run AI ranking"}
+            {isProcessing
+              ? "Parsing resumes…"
+              : isRanking
+                ? "Ranking…"
+                : isPipelineRunning
+                  ? "Starting…"
+                  : "Rank candidates"}
           </button>
         ) : (
           <button
             type="button"
             disabled
-            title="Close the job before ranking candidates"
+            title={process.reason ?? "Close the job before ranking candidates"}
             className="flex cursor-not-allowed items-center gap-2 rounded-control bg-warning/10 px-5 py-3 text-body font-semibold text-warning"
           >
             <LockIcon className="h-4 w-4" />
-            Can't rank until job is closed
+            {process.reason ?? "Can't rank until job is closed"}
           </button>
         )}
       </div>
@@ -716,9 +783,9 @@ export function Candidates() {
         <EmptyState
           title="No ranked candidates yet"
           description={
-            canRank
-              ? "Run AI ranking above to score and rank submissions."
-              : "Close this job, then run AI ranking to score submissions."
+            process.allowed
+              ? "Rank candidates above to score and rank submissions."
+              : "Close this job, then rank candidates to score submissions."
           }
           icon={<SparklesIcon />}
         />

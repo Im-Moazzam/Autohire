@@ -48,4 +48,16 @@ describe("canProcessJob", () => {
       canProcessJob({ status: "DRAFT", submission_count: 5 }).allowed,
     ).toBe(false);
   });
+
+  it("PROCESSED with candidates -> true (re-running the pipeline)", () => {
+    expect(
+      canProcessJob({ status: "PROCESSED", submission_count: 1 }).allowed,
+    ).toBe(true);
+  });
+
+  it("PROCESSED with zero candidates -> false", () => {
+    expect(
+      canProcessJob({ status: "PROCESSED", submission_count: 0 }).allowed,
+    ).toBe(false);
+  });
 });
