@@ -26,6 +26,12 @@ class CandidateOut(BaseModel):
     submitted_at: datetime
     parse_error: str | None
     resume_url: str | None
+    # What submission_status would be if this candidate had never been
+    # rejected — derived from real data (an ai_analysis_results row, a
+    # populated resume_text, a parse_error), never a guess. Only meaningful
+    # when submission_status == REJECTED (that's the only state "undo"
+    # applies to), but always present so the shape doesn't change per-row.
+    restorable_status: SubmissionStatus
 
 
 class RankedCandidateOut(CandidateOut):

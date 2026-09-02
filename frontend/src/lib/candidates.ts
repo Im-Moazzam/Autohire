@@ -39,36 +39,46 @@ const LEGAL_TRANSITIONS: Record<SubmissionStatus, SubmissionStatus[]> = {
   SUBMITTED: ["REJECTED"],
   PARSE_ERROR: ["REJECTED"],
   PARSED: ["REJECTED"],
-  RANKED: ["INVITED", "REJECTED"],
+  // No "INVITED" here: scheduling a real interview must go through
+  // POST /interviews (creates a real Calendar event + sends the invite
+  // email) — see the dedicated "Schedule interview" action, not a bare
+  // status PATCH that would silently fake having scheduled anything.
+  RANKED: ["REJECTED"],
   INVITED: ["REJECTED"],
   RESCHEDULED: ["REJECTED"],
   CONFIRMED: [],
   DECLINED: [],
-  // The one back-edge: a recruiter can undo an accidental rejection. Lands
-  // on PARSED, not RANKED — the ranked list is an INNER JOIN against
-  // ai_analysis_results, so a RANKED status with no analysis row would be a
-  // candidate the ranked list could never actually show. PARSED accurately
-  // means "eligible for the next ranking run," not "already ranked."
-  // Deliberately no direct REJECTED -> INVITED shortcut: undo first, same
-  // path as any other candidate — one obvious way back in, not two.
-  // DECLINED stays terminal — that's the candidate's own answer.
-  REJECTED: ["PARSED"],
+  // REJECTED is handled separately by nextStatusOptions below — its one
+  // legal target is never a fixed value here, it's whatever
+  // restorable_status says (SUBMITTED/PARSED/PARSE_ERROR/RANKED), computed
+  // server-side from real data. DECLINED stays terminal — that's the
+  // candidate's own answer.
+  REJECTED: [],
 };
 
+/** REJECTED's single legal target is dynamic — restorable_status (from the
+ * API, derived from real data: an ai_analysis_results row, a populated
+ * resume_text, a parse_error) is what submission_status would be if this
+ * candidate had never been rejected. Hardcoding a fixed target here would
+ * repeat the exact bug this replaced: claiming a parse/rank that never
+ * happened. Every other current status keeps its static transition set. */
 export function nextStatusOptions(
   current: SubmissionStatus,
+  restorableStatus?: SubmissionStatus,
 ): SubmissionStatus[] {
+  if (current === "REJECTED") return restorableStatus ? [restorableStatus] : [];
   return LEGAL_TRANSITIONS[current] ?? [];
 }
 
-/** "Mark Parsed" reads like a no-op for the REJECTED -> PARSED edge — it's
- * actually undoing the rejection. Every other transition keeps the default
- * "Mark {label}" wording. */
+/** Any REJECTED -> X transition is an undo, regardless of which status X
+ * turns out to be (SUBMITTED/PARSED/PARSE_ERROR/RANKED) — "Mark Ranked"
+ * would read like a fabricated re-rank, "Undo rejection" is accurate for
+ * all of them. Every other transition keeps the default "Mark {label}". */
 export function statusActionLabel(
   target: SubmissionStatus,
   from: SubmissionStatus,
 ): string {
-  if (from === "REJECTED" && target === "PARSED") return "Undo rejection";
+  if (from === "REJECTED") return "Undo rejection";
   return `Mark ${SUBMISSION_STATUS_LABELS[target]}`;
 }
 

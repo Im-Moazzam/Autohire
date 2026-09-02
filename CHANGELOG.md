@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### Fixed
+- Candidate status actions, two direct UX fixes: (1) an `INVITED` candidate
+  no longer shows a "Mark Rejected" button next to an invite that's already
+  gone out — a same-card reject read as contradictory. Shows a
+  non-actionable green "Invite sent for interview" confirmation instead.
+  (2) "Undo rejection" now uses a distinct amber `warning` button variant
+  (new on the shared `Button` component) with a dedicated undo icon
+  (`RotateCcwIcon`), instead of looking identical to a generic "Mark X"
+  primary-blue action.
+- "Undo rejection" always landed on `PARSED`, hardcoded regardless of what
+  the candidate's status actually was before rejection — a candidate
+  rejected while the job was still `LIVE` (never closed or processed, so
+  genuinely still `SUBMITTED`) came back showing `Parsed`, a parse that
+  never ran. The same bug would have shown `Parsed` instead of `Ranked` for
+  a candidate rejected *after* being ranked, silently losing their
+  "Schedule interview" action on undo. `candidate_service` gains
+  `compute_restorable_status(candidate, has_ranking)`, deriving the real
+  prior status from data that already exists — an `ai_analysis_results` row
+  means `RANKED`, a `parse_error` means `PARSE_ERROR`, a populated
+  `resume_text` means `PARSED`, otherwise `SUBMITTED` — exposed as
+  `restorable_status` on `CandidateOut` (batched via a new
+  `ranking_exists_map`, one query for the whole page, never N+1).
+  `_LEGAL_TRANSITIONS[REJECTED]` widened from `{PARSED}` to
+  `{SUBMITTED, PARSED, PARSE_ERROR, RANKED}` to make the four real targets
+  legal. Frontend: `nextStatusOptions`/`statusActionLabel` no longer
+  hardcode `PARSED` for the undo edge — they use `restorable_status` from
+  the API, still bordered as "Undo rejection" no matter which of the four
+  it resolves to. See `docs/drift.md` row 71.
+- Clicking anywhere on an "All submissions" table row now opens the
+  candidate detail modal — previously only the name/email text itself was
+  clickable, everything else in the row did nothing. `DataTable` gained a
+  reusable `onRowClick` prop (Templates' non-clickable rows are unaffected,
+  since it's optional); the resume-link cell stops propagation so it still
+  opens independently instead of also triggering the row click.
+
 ### Added
 - Dev tooling: `mise run db:seed-demo` (`backend/app/scripts/seed_demo.py`) rebuilds a
   full demo world — recruiter, templates, jobs across every status, candidates across
@@ -165,6 +200,28 @@
     cost of a full Docker build.
 
 ### Added
+- US-24/US-26/US-27: Scheduling and Emails screens (frontend) — the last
+  two backend-ready screens with no UI. New `/scheduling` route: an
+  availability form (`GET`/`PUT /scheduling/preferences` — days, hours,
+  slot length) plus a real interview list (`GET /interviews`, filterable by
+  job/status, with a working Meet link per row). New `/emails` route: a
+  read-only delivery log (`GET /emails`, filterable by job/type) for
+  automated candidate emails. Both wired into the sidebar, which previously
+  had them permanently disabled ("Coming soon").
+- The Candidates screen's "Mark Interview Invited" button was a bare status
+  PATCH — no calendar event, no email, nothing real, despite Moazzam's
+  US-26/US-27 backend already existing to do exactly that. Replaced it with
+  a real **"Schedule interview"** action (on both the ranked card and the
+  candidate detail modal) that calls `POST /interviews`, polls the returned
+  `CALENDAR_SYNC` task the same way "Run AI ranking" does, and reports the
+  outcome from the task's `result_summary` (`scheduled`/`unscheduled` with a
+  reason, e.g. "no available slot in the next 14 days — check your
+  availability"). `nextStatusOptions` no longer offers a direct
+  `RANKED -> INVITED` PATCH — scheduling a real interview is the only path
+  now, so the UI can't imply one happened when it didn't. Verified against
+  the real backend end-to-end: a scheduled candidate produces a real
+  Calendar event (Meet link), a real Gmail invite logged in `email_logs`,
+  and shows up in both new screens.
 - Templates and Apply pick up the shared icon set introduced alongside the
   Candidates screen: Templates' table Edit/Delete actions are now icon-only
   buttons (pencil, trash) with hover tooltips instead of plain text links,

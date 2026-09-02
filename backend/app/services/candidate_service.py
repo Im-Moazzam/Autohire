@@ -12,6 +12,7 @@ from starlette.datastructures import FormData
 from app.adapters.base import ResumeStore
 from app.adapters.resume_store import local_job_folder
 from app.core.config import settings
+from app.models.ai_analysis_result import AiAnalysisResult
 from app.models.candidate import Candidate, CandidateFormResponse
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
@@ -40,16 +41,20 @@ def _drive_display_name(original_filename: str | None, extension: str) -> str:
 # job_service._LEGAL_TRANSITIONS. PARSED is never re-parsed — the retry AC
 # ("retry only SUBMITTED and PARSE_ERROR") is itself a transition rule, not
 # just a query filter. REJECTED is reachable from any non-terminal state.
-# REJECTED -> PARSED is the one back-edge (docs/drift.md row 70): a
-# recruiter can undo an accidental rejection. Lands on PARSED, not RANKED —
-# ranking_service.list_ranked_candidates INNER JOINs ai_analysis_results, so a
-# RANKED candidate with no analysis row would carry a status the ranked list
-# can never actually show; PARSED accurately says "eligible for the next
-# ranking run" without claiming one already happened. Deliberately no direct
-# REJECTED -> INVITED: a recruiter who wants to interview a reconsidered
-# candidate undoes the rejection first, same path as any other candidate —
-# one obvious way back in, not two. DECLINED stays terminal — that's the
-# candidate's own answer, not the recruiter's.
+# REJECTED -> {SUBMITTED, PARSED, PARSE_ERROR, RANKED} are the back-edges
+# (docs/drift.md row 70/71): a recruiter can undo an accidental rejection.
+# The actual target is never guessed or hardcoded — compute_restorable_status
+# derives it from real data (an ai_analysis_results row means RANKED; a
+# parse_error means PARSE_ERROR; a populated resume_text means PARSED;
+# otherwise SUBMITTED — a job still LIVE, never closed/processed, can only
+# produce SUBMITTED candidates). Widening this set to all four is what makes
+# that honest: undoing a REJECTED SUBMITTED candidate must land back on
+# SUBMITTED, not silently upgrade them to PARSED just because that used to be
+# the only legal target. Deliberately no direct REJECTED -> INVITED: a
+# recruiter who wants to interview a reconsidered candidate undoes the
+# rejection first, same path as any other candidate — one obvious way back
+# in, not two. DECLINED stays terminal — that's the candidate's own answer,
+# not the recruiter's.
 _LEGAL_TRANSITIONS: dict[SubmissionStatus, set[SubmissionStatus]] = {
     SubmissionStatus.SUBMITTED: {
         SubmissionStatus.PARSED,
@@ -76,8 +81,51 @@ _LEGAL_TRANSITIONS: dict[SubmissionStatus, set[SubmissionStatus]] = {
     },
     SubmissionStatus.CONFIRMED: {SubmissionStatus.RESCHEDULED, SubmissionStatus.REJECTED},
     SubmissionStatus.DECLINED: set(),
-    SubmissionStatus.REJECTED: {SubmissionStatus.PARSED},
+    SubmissionStatus.REJECTED: {
+        SubmissionStatus.SUBMITTED,
+        SubmissionStatus.PARSED,
+        SubmissionStatus.PARSE_ERROR,
+        SubmissionStatus.RANKED,
+    },
 }
+
+
+def compute_restorable_status(candidate: Candidate, has_ranking: bool) -> SubmissionStatus:
+    """What submission_status would be if this candidate had never been
+    rejected — derived from real data, never guessed, so "undo rejection"
+    can't claim a ranking or a parse that never actually happened."""
+    if has_ranking:
+        return SubmissionStatus.RANKED
+    if candidate.parse_error:
+        return SubmissionStatus.PARSE_ERROR
+    if candidate.resume_text:
+        return SubmissionStatus.PARSED
+    return SubmissionStatus.SUBMITTED
+
+
+def ranking_exists(db: Session, candidate_id: uuid.UUID) -> bool:
+    return (
+        db.scalar(
+            select(AiAnalysisResult.candidate_id).where(
+                AiAnalysisResult.candidate_id == candidate_id
+            )
+        )
+        is not None
+    )
+
+
+def ranking_exists_map(db: Session, candidate_ids: list[uuid.UUID]) -> dict[uuid.UUID, bool]:
+    """Bounded, single query — never N+1 over a page of candidates."""
+    if not candidate_ids:
+        return {}
+    ranked_ids = set(
+        db.scalars(
+            select(AiAnalysisResult.candidate_id).where(
+                AiAnalysisResult.candidate_id.in_(candidate_ids)
+            )
+        ).all()
+    )
+    return {cid: cid in ranked_ids for cid in candidate_ids}
 
 
 def is_legal_transition(current: SubmissionStatus, target: SubmissionStatus) -> bool:

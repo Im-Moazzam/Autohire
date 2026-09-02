@@ -1,12 +1,16 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+export type ButtonVariant =
+  "primary" | "secondary" | "ghost" | "destructive" | "warning";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary: "bg-primary text-white hover:bg-primary/90",
   secondary: "bg-surface text-navy border border-border hover:bg-primary-soft",
   ghost: "bg-transparent text-muted hover:bg-primary-soft",
   destructive: "bg-error text-white hover:bg-error/90",
+  /** Corrective/reversal actions (e.g. "Undo") — distinct from primary
+   * (forward progress) and destructive (permanent/negative). */
+  warning: "bg-warning text-white hover:bg-warning/90",
 };
 
 /**

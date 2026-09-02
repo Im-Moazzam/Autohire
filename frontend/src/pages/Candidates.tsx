@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
   DataTable,
@@ -13,15 +14,18 @@ import { buttonClassName } from "../components/ui/Button";
 import { useToast } from "../components/ui/Toast";
 import {
   ArrowLeftIcon,
+  CalendarIcon,
   CheckIcon,
   FileTextIcon,
   LockIcon,
+  RotateCcwIcon,
   SparklesIcon,
   UsersIcon,
   XIcon,
 } from "../components/ui/icons";
-import { apiErrorMessage } from "../lib/http";
+import { apiErrorCode, apiErrorMessage } from "../lib/http";
 import { JOB_STATUS_LABELS, useJob, useTriggerRank } from "../lib/jobs";
+import { useScheduleInterviews } from "../lib/scheduling";
 import { useTask } from "../lib/tasks";
 import {
   nextStatusOptions,
@@ -36,6 +40,16 @@ import {
   type RankedCandidate,
   type SubmissionStatus,
 } from "../lib/candidates";
+
+const UNSCHEDULED_REASONS: Record<string, string> = {
+  NO_SLOT_IN_HORIZON:
+    "No available slot in the next 14 days — check your interview availability in Scheduling.",
+  ALREADY_SCHEDULED: "This candidate already has an interview scheduled.",
+  SLOT_TIME_TAKEN: "That time was just taken — try again.",
+  CALENDAR_FAILED: "Couldn't create the calendar event. Try again.",
+  NOT_RANKED: "This candidate is no longer ranked.",
+  CANDIDATE_NOT_FOUND: "Candidate not found.",
+};
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -79,12 +93,15 @@ function ResumeLink({ url }: { url: string | null | undefined }) {
 function StatusActions({
   candidateId,
   current,
+  restorableStatus,
   jobId,
   onDone,
   onError,
 }: {
   candidateId: string;
   current: SubmissionStatus;
+  /** Only meaningful when current === "REJECTED" — see nextStatusOptions. */
+  restorableStatus?: SubmissionStatus;
   jobId: string | undefined;
   onDone?: () => void;
   /** Defaults to a toast. Pass this when rendering inside an open <dialog> —
@@ -95,7 +112,18 @@ function StatusActions({
 }) {
   const { showToast } = useToast();
   const updateStatus = useUpdateCandidateStatus(jobId);
-  const options = nextStatusOptions(current);
+  const options = nextStatusOptions(current, restorableStatus);
+
+  // Once an invite is out, a same-card reject reads as contradictory —
+  // show the real, already-happened outcome instead of another action.
+  if (current === "INVITED") {
+    return (
+      <div className="flex h-11 flex-1 items-center justify-center gap-2 rounded-control bg-success/10 px-4 text-body font-semibold text-success">
+        <CheckIcon className="h-4 w-4" />
+        Invite sent for interview
+      </div>
+    );
+  }
 
   if (options.length === 0) return null;
 
@@ -105,7 +133,7 @@ function StatusActions({
       {
         onSuccess: () => {
           showToast(
-            current === "REJECTED" && status === "PARSED"
+            current === "REJECTED"
               ? "Rejection undone."
               : `Marked as ${SUBMISSION_STATUS_LABELS[status]}.`,
             "success",
@@ -121,6 +149,8 @@ function StatusActions({
     );
   }
 
+  const isUndo = current === "REJECTED";
+
   return (
     <div className="flex gap-3">
       {options.map((status) => (
@@ -130,12 +160,18 @@ function StatusActions({
           disabled={updateStatus.isPending}
           onClick={() => act(status)}
           className={buttonClassName({
-            variant: status === "REJECTED" ? "destructive" : "primary",
+            variant: isUndo
+              ? "warning"
+              : status === "REJECTED"
+                ? "destructive"
+                : "primary",
             className:
               "flex-1 h-11 gap-2 disabled:opacity-40 hover:-translate-y-px hover:shadow-card transition-transform",
           })}
         >
-          {status === "REJECTED" ? (
+          {isUndo ? (
+            <RotateCcwIcon className="h-4 w-4" />
+          ) : status === "REJECTED" ? (
             <XIcon className="h-4 w-4" />
           ) : (
             <CheckIcon className="h-4 w-4" />
@@ -144,6 +180,107 @@ function StatusActions({
         </button>
       ))}
     </div>
+  );
+}
+
+/** The real scheduling action for a RANKED candidate: POST /interviews (a
+ * real Calendar event + invite email), not a bare status PATCH. Polls the
+ * returned task the same way "Run AI ranking" does. */
+function ScheduleInterviewButton({
+  candidateId,
+  jobId,
+}: {
+  candidateId: string;
+  jobId: string | undefined;
+}) {
+  const { showToast, dismissToast } = useToast();
+  const queryClient = useQueryClient();
+  const scheduleInterviews = useScheduleInterviews();
+  const [taskId, setTaskId] = useState<string | undefined>();
+  const toastIdRef = useRef<number | null>(null);
+  const task = useTask(taskId);
+
+  useEffect(() => {
+    if (!taskId || !task.data) return;
+    if (task.data.status !== "SUCCESS" && task.data.status !== "FAILED") return;
+
+    setTaskId(undefined);
+    if (toastIdRef.current !== null) dismissToast(toastIdRef.current);
+    queryClient.invalidateQueries({ queryKey: ["candidates", jobId] });
+    queryClient.invalidateQueries({
+      queryKey: ["candidates", "detail", candidateId],
+    });
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+
+    if (task.data.status === "FAILED") {
+      showToast(
+        task.data.error_message ?? "Couldn't schedule an interview.",
+        "error",
+      );
+      return;
+    }
+
+    const summary = task.data.result_summary as {
+      scheduled: number;
+      unscheduled: { reason: string }[];
+    } | null;
+    if (summary?.scheduled) {
+      showToast("Interview scheduled — invite sent.", "success");
+    } else {
+      const reason = summary?.unscheduled[0]?.reason;
+      showToast(
+        (reason && UNSCHEDULED_REASONS[reason]) ??
+          "Couldn't schedule an interview.",
+        "error",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.data?.status]);
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!jobId) return;
+    scheduleInterviews.mutate(
+      { job_id: jobId, candidate_ids: [candidateId] },
+      {
+        onSuccess: (t) => {
+          setTaskId(t.task_id);
+          toastIdRef.current = showToast("Scheduling interview…", "loading");
+        },
+        onError: (err) => {
+          const message =
+            apiErrorCode(err) === "NO_SCHEDULING_PREFERENCES"
+              ? "Set your interview availability in Scheduling first."
+              : apiErrorMessage(err, "Couldn't schedule an interview.");
+          showToast(message, "error");
+        },
+      },
+    );
+  }
+
+  const isBusy = scheduleInterviews.isPending || !!taskId;
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isBusy}
+      className={buttonClassName({
+        variant: "primary",
+        className:
+          "flex-1 h-11 gap-2 disabled:opacity-40 hover:-translate-y-px hover:shadow-card transition-transform",
+      })}
+    >
+      {isBusy ? (
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      ) : (
+        <CalendarIcon className="h-4 w-4" />
+      )}
+      {isBusy ? "Scheduling…" : "Schedule interview"}
+    </button>
   );
 }
 
@@ -173,14 +310,26 @@ function CandidateDetailModal({
       size="lg"
       errorText={statusError}
       footer={
-        data && nextStatusOptions(data.submission_status).length > 0 ? (
-          <StatusActions
-            candidateId={data.candidate_id}
-            current={data.submission_status}
-            jobId={jobId}
-            onDone={onClose}
-            onError={setStatusError}
-          />
+        data &&
+        (data.submission_status === "RANKED" ||
+          nextStatusOptions(data.submission_status, data.restorable_status)
+            .length > 0) ? (
+          <div className="flex gap-3">
+            {data.submission_status === "RANKED" && (
+              <ScheduleInterviewButton
+                candidateId={data.candidate_id}
+                jobId={jobId}
+              />
+            )}
+            <StatusActions
+              candidateId={data.candidate_id}
+              current={data.submission_status}
+              restorableStatus={data.restorable_status}
+              jobId={jobId}
+              onDone={onClose}
+              onError={setStatusError}
+            />
+          </div>
         ) : undefined
       }
     >
@@ -315,10 +464,17 @@ function RankedCard({
         </div>
       )}
 
-      <div onClick={(e) => e.stopPropagation()}>
+      <div onClick={(e) => e.stopPropagation()} className="flex gap-3">
+        {candidate.submission_status === "RANKED" && (
+          <ScheduleInterviewButton
+            candidateId={candidate.candidate_id}
+            jobId={jobId}
+          />
+        )}
         <StatusActions
           candidateId={candidate.candidate_id}
           current={candidate.submission_status}
+          restorableStatus={candidate.restorable_status}
           jobId={jobId}
         />
       </div>
@@ -396,7 +552,9 @@ export function Candidates() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-page font-semibold">
-              {job.isLoading ? "Loading…" : job.data?.job_title ?? "Candidates"}
+              {job.isLoading
+                ? "Loading…"
+                : (job.data?.job_title ?? "Candidates")}
             </h1>
             {job.data && (
               <StatusBadge status={JOB_STATUS_LABELS[job.data.status]} />
@@ -484,14 +642,10 @@ export function Candidates() {
                 key: "full_name",
                 header: "Applicant",
                 render: (c) => (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedId(c.candidate_id)}
-                    className="text-left hover:underline"
-                  >
+                  <div>
                     <div className="font-medium text-ink">{c.full_name}</div>
                     <div className="text-helper text-muted">{c.email}</div>
-                  </button>
+                  </div>
                 ),
               },
               {
@@ -511,11 +665,16 @@ export function Candidates() {
               {
                 key: "resume",
                 header: "Resume",
-                render: (c) => <ResumeLink url={c.resume_url} />,
+                render: (c) => (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <ResumeLink url={c.resume_url} />
+                  </span>
+                ),
               },
             ]}
             rows={candidates.data?.items ?? []}
             rowKey={(c) => c.candidate_id}
+            onRowClick={(c) => setSelectedId(c.candidate_id)}
             isLoading={candidates.isLoading}
             errorText={
               candidates.isError

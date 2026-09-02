@@ -22,6 +22,11 @@ export interface DataTableProps<T> {
   emptyIcon?: ReactNode;
   /** Partial/degraded state: flag individual rows that failed without dropping the rest. */
   rowError?: (row: T) => string | undefined;
+  /** Makes the whole row clickable (not just whatever a column happens to
+   * render as a link/button) — e.g. opening a detail view. A column that
+   * needs its own click target (a resume link, an action button) should
+   * stop propagation itself so it doesn't also trigger this. */
+  onRowClick?: (row: T) => void;
 }
 
 export function DataTable<T>({
@@ -37,6 +42,7 @@ export function DataTable<T>({
   onEmptyAction,
   emptyIcon,
   rowError,
+  onRowClick,
 }: DataTableProps<T>) {
   if (errorText && rows.length === 0) {
     return (
@@ -93,7 +99,23 @@ export function DataTable<T>({
                 return (
                   <tr
                     key={rowKey(row)}
-                    className="border-b border-border last:border-0 hover:bg-primary-soft"
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    role={onRowClick ? "button" : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              onRowClick(row);
+                            }
+                          }
+                        : undefined
+                    }
+                    className={[
+                      "border-b border-border last:border-0 hover:bg-primary-soft",
+                      onRowClick ? "cursor-pointer" : "",
+                    ].join(" ")}
                   >
                     {columns.map((col, i) => (
                       <td key={col.key} className="px-4 py-3">
