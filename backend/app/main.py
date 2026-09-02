@@ -7,6 +7,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.routes.auth import router as auth_router
 from app.api.routes.candidates import candidates_router, job_candidates_router
+from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.emails import router as emails_router
 from app.api.routes.interviews import router as interviews_router
 from app.api.routes.jobs import router as jobs_router
@@ -98,4 +99,5 @@ api_router.include_router(tasks_router)
 api_router.include_router(scheduling_router)
 api_router.include_router(interviews_router)
 api_router.include_router(emails_router)
+api_router.include_router(dashboard_router)
 app.include_router(api_router)

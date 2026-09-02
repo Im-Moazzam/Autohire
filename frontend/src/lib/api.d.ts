@@ -473,6 +473,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/dashboard/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Stats */
+        get: operations["get_stats_api_v1_dashboard_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -567,6 +584,39 @@ export interface components {
         /** CandidateUpdate */
         CandidateUpdate: {
             submission_status: components["schemas"]["SubmissionStatus"];
+        };
+        /**
+         * DashboardStatsOut
+         * @description Recruiter-scoped counts across every table the dashboard needs — each
+         *     breakdown is zero-filled across its full enum (dashboard_service), so the
+         *     frontend never has to guess whether a missing key means zero or an
+         *     omission.
+         */
+        DashboardStatsOut: {
+            /** Total Jobs */
+            total_jobs: number;
+            /** Total Candidates */
+            total_candidates: number;
+            /** Total Interviews */
+            total_interviews: number;
+            /** Total Emails */
+            total_emails: number;
+            /** Jobs By Status */
+            jobs_by_status: {
+                [key: string]: number;
+            };
+            /** Candidates By Status */
+            candidates_by_status: {
+                [key: string]: number;
+            };
+            /** Interviews By Status */
+            interviews_by_status: {
+                [key: string]: number;
+            };
+            /** Emails By Status */
+            emails_by_status: {
+                [key: string]: number;
+            };
         };
         /**
          * DeliveryStatus
@@ -2919,6 +2969,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Page_EmailLogOut_"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_stats_api_v1_dashboard_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                autohire_session?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardStatsOut"];
                 };
             };
             /** @description Unauthorized */

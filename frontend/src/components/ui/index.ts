@@ -10,3 +10,6 @@ export * from "./MatchScore";
 export * from "./Card";
 export * from "./EmptyState";
 export * from "./Toast";
+export * from "./AnimatedNumber";
+export * from "./DonutChart";
+export * from "./FunnelBarChart";
