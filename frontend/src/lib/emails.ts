@@ -27,10 +27,16 @@ export interface EmailListFilters {
   job_id?: string;
   candidate_id?: string;
   email_type?: EmailType;
+  page?: number;
 }
 
+export const EMAILS_PAGE_SIZE = 20;
+
 export function useEmails(filters: EmailListFilters) {
-  const params = new URLSearchParams({ size: "100" });
+  const params = new URLSearchParams({
+    size: String(EMAILS_PAGE_SIZE),
+    page: String(filters.page ?? 1),
+  });
   if (filters.job_id) params.set("job_id", filters.job_id);
   if (filters.candidate_id) params.set("candidate_id", filters.candidate_id);
   if (filters.email_type) params.set("email_type", filters.email_type);

@@ -62,10 +62,16 @@ export function useUpdateSchedulingPreferences() {
 export interface InterviewListFilters {
   job_id?: string;
   status?: SlotStatus;
+  page?: number;
 }
 
+export const INTERVIEWS_PAGE_SIZE = 20;
+
 export function useInterviews(filters: InterviewListFilters) {
-  const params = new URLSearchParams({ size: "100" });
+  const params = new URLSearchParams({
+    size: String(INTERVIEWS_PAGE_SIZE),
+    page: String(filters.page ?? 1),
+  });
   if (filters.job_id) params.set("job_id", filters.job_id);
   if (filters.status) params.set("status", filters.status);
 

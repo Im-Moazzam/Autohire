@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { DataTable, Select, StatusBadge } from "../components/ui";
+import { DataTable, Pagination, Select, StatusBadge } from "../components/ui";
 import { MailIcon } from "../components/ui/icons";
 import { apiErrorMessage } from "../lib/http";
 import { useJobs } from "../lib/jobs";
 import {
   DELIVERY_STATUS_LABELS,
   EMAIL_TYPE_LABELS,
+  EMAILS_PAGE_SIZE,
   useEmails,
   type EmailLog,
   type EmailType,
@@ -32,11 +33,13 @@ function formatDateTime(iso: string): string {
 export function Emails() {
   const [jobFilter, setJobFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState<EmailType | "">("");
+  const [page, setPage] = useState(1);
 
   const jobs = useJobs({});
   const emails = useEmails({
     job_id: jobFilter || undefined,
     email_type: typeFilter || undefined,
+    page,
   });
 
   const jobOptions = useMemo(
@@ -64,14 +67,20 @@ export function Emails() {
           label="Job"
           options={jobOptions}
           value={jobFilter}
-          onChange={(e) => setJobFilter(e.target.value)}
+          onChange={(e) => {
+            setJobFilter(e.target.value);
+            setPage(1);
+          }}
           className="w-64"
         />
         <Select
           label="Type"
           options={TYPE_OPTIONS}
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as EmailType | "")}
+          onChange={(e) => {
+            setTypeFilter(e.target.value as EmailType | "");
+            setPage(1);
+          }}
           className="w-56"
         />
       </div>
@@ -113,6 +122,15 @@ export function Emails() {
         emptyDescription="Automated emails (like interview invitations) will show up here once they're sent."
         emptyIcon={<MailIcon />}
       />
+
+      {emails.data && (
+        <Pagination
+          page={page}
+          size={EMAILS_PAGE_SIZE}
+          total={emails.data.total}
+          onPageChange={setPage}
+        />
+      )}
     </div>
   );
 }

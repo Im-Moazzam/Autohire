@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Fixed
+- Emails and Scheduling lists silently truncated at 100 rows with no way to
+  see the rest — `useEmails`/`useInterviews` fetched a single fixed
+  `size=100` page and never surfaced `total`, so a recruiter with more than
+  100 emails or interviews just lost the overflow. Both hooks now page
+  (`size=20`) and a new shared `Pagination` component (`src/components/ui`)
+  renders Previous/Next controls plus an "X–Y of Z" count on the Emails and
+  Scheduling screens; filter changes reset back to page 1.
 - Candidate status actions, two direct UX fixes: (1) an `INVITED` candidate
   no longer shows a "Mark Rejected" button next to an invite that's already
   gone out — a same-card reject read as contradictory. Shows a

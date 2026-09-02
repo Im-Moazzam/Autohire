@@ -13,3 +13,4 @@ export * from "./Toast";
 export * from "./AnimatedNumber";
 export * from "./DonutChart";
 export * from "./FunnelBarChart";
+export * from "./Pagination";
