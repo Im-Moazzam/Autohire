@@ -53,6 +53,12 @@ export function Modal({
   footer,
 }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  // True only when the mousedown that started this interaction landed on the
+  // backdrop itself. Without this, a press-inside/drag/release-outside
+  // gesture (e.g. a click that starts on the button while content is still
+  // reflowing and ends on the dialog element as the layout shifts) closes
+  // the modal instead of registering as a click on the inner element.
+  const backdropMouseDown = useRef(false);
 
   useEffect(() => {
     const dialog = ref.current;
@@ -78,10 +84,16 @@ export function Modal({
       ref={ref}
       onClose={onClose}
       onCancel={onClose}
+      onMouseDown={(e) => {
+        backdropMouseDown.current = e.target === ref.current;
+      }}
       onClick={(e) => {
         // Click on the backdrop (the ::backdrop pseudo-element isn't a real
-        // child, so a click landing directly on <dialog> itself is the backdrop).
-        if (e.target === ref.current) onClose();
+        // child, so a click landing directly on <dialog> itself is the
+        // backdrop) — but only close if the press *started* there too, so a
+        // press-inside/release-outside drag doesn't close the modal.
+        if (e.target === ref.current && backdropMouseDown.current) onClose();
+        backdropMouseDown.current = false;
       }}
       className={[
         "fixed inset-0 m-auto max-h-[85vh] w-[calc(100%-2rem)] overflow-hidden rounded-card p-0",
