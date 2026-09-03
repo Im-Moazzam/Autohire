@@ -32,6 +32,11 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+// Date.now() collides when two toasts are raised in the same millisecond
+// (two ScheduleInterviewButton instances resolving together, for example) —
+// same key twice in the list, and one dismissToast call removes both.
+let nextToastId = 0;
+
 export function useToast() {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToast must be used within a ToastProvider");
@@ -47,7 +52,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback(
     (message: string, variant: Variant = "success") => {
-      const id = Date.now();
+      const id = nextToastId++;
       setToasts((prev) => [...prev, { id, message, variant }]);
       if (variant !== "loading") {
         setTimeout(() => dismissToast(id), 4000);
