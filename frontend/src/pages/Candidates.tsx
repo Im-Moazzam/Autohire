@@ -32,7 +32,7 @@ import {
   useTriggerRank,
 } from "../lib/jobs";
 import { useScheduleInterviews } from "../lib/scheduling";
-import { useTask } from "../lib/tasks";
+import { isTerminal, scheduleOutcome, useTask } from "../lib/tasks";
 import {
   nextStatusOptions,
   statusActionLabel,
@@ -46,16 +46,6 @@ import {
   type RankedCandidate,
   type SubmissionStatus,
 } from "../lib/candidates";
-
-const UNSCHEDULED_REASONS: Record<string, string> = {
-  NO_SLOT_IN_HORIZON:
-    "No available slot in the next 14 days — check your interview availability in Scheduling.",
-  ALREADY_SCHEDULED: "This candidate already has an interview scheduled.",
-  SLOT_TIME_TAKEN: "That time was just taken — try again.",
-  CALENDAR_FAILED: "Couldn't create the calendar event. Try again.",
-  NOT_RANKED: "This candidate is no longer ranked.",
-  CANDIDATE_NOT_FOUND: "Candidate not found.",
-};
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -207,41 +197,34 @@ function ScheduleInterviewButton({
   const task = useTask(taskId);
 
   useEffect(() => {
-    if (!taskId || !task.data) return;
-    if (task.data.status !== "SUCCESS" && task.data.status !== "FAILED") return;
+    if (!taskId || !task.data || !isTerminal(task.data.status)) return;
 
     setTaskId(undefined);
-    if (toastIdRef.current !== null) dismissToast(toastIdRef.current);
+    if (toastIdRef.current !== null) {
+      dismissToast(toastIdRef.current);
+      toastIdRef.current = null;
+    }
     queryClient.invalidateQueries({ queryKey: ["candidates", jobId] });
     queryClient.invalidateQueries({
       queryKey: ["candidates", "detail", candidateId],
     });
     queryClient.invalidateQueries({ queryKey: ["interviews"] });
 
-    if (task.data.status === "FAILED") {
-      showToast(
-        task.data.error_message ?? "Couldn't schedule an interview.",
-        "error",
-      );
-      return;
-    }
-
-    const summary = task.data.result_summary as {
-      scheduled: number;
-      unscheduled: { reason: string }[];
-    } | null;
-    if (summary?.scheduled) {
-      showToast("Interview scheduled — invite sent.", "success");
-    } else {
-      const reason = summary?.unscheduled[0]?.reason;
-      showToast(
-        (reason && UNSCHEDULED_REASONS[reason]) ??
-          "Couldn't schedule an interview.",
-        "error",
-      );
-    }
+    const outcome = scheduleOutcome(task.data);
+    showToast(outcome.message, outcome.variant);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task.data?.status]);
+
+  // A loading toast never auto-dismisses (Toast.tsx). If this button
+  // unmounts mid-poll — the modal closes, or a list refetch flips the
+  // candidate off RANKED before the effect above runs — the toast above
+  // never fires and the spinner toast would otherwise hang forever.
+  useEffect(() => {
+    return () => {
+      if (toastIdRef.current !== null) dismissToast(toastIdRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -264,7 +247,9 @@ function ScheduleInterviewButton({
     );
   }
 
-  const isBusy = scheduleInterviews.isPending || !!taskId;
+  const isBusy =
+    scheduleInterviews.isPending ||
+    (task.data ? !isTerminal(task.data.status) : !!taskId);
 
   return (
     <button
@@ -316,10 +301,21 @@ function CandidateDetailModal({
       size="lg"
       errorText={statusError}
       footer={
-        data &&
-        (data.submission_status === "RANKED" ||
-          nextStatusOptions(data.submission_status, data.restorable_status)
-            .length > 0) ? (
+        isLoading ? (
+          // Same h-11 button geometry as the loaded footer below, present
+          // from first paint. Without this the footer (and the "Schedule
+          // interview" button) mounts only once `data` resolves, at the
+          // same instant the body swaps from a short skeleton to the full
+          // profile — the resulting reflow moves the button's hit-box out
+          // from under a click aimed at where it was about to appear.
+          <div className="flex gap-3" aria-hidden="true">
+            <div className="h-11 flex-1 rounded-control bg-border/40 animate-pulse" />
+            <div className="h-11 w-32 rounded-control bg-border/40 animate-pulse" />
+          </div>
+        ) : data &&
+          (data.submission_status === "RANKED" ||
+            nextStatusOptions(data.submission_status, data.restorable_status)
+              .length > 0) ? (
           <div className="flex gap-3">
             {data.submission_status === "RANKED" && (
               <ScheduleInterviewButton
@@ -340,11 +336,16 @@ function CandidateDetailModal({
       }
     >
       {isLoading ? (
-        <div className="flex flex-col gap-3">
-          <div className="h-12 w-12 rounded-full bg-border animate-pulse" />
-          <div className="h-4 w-2/3 rounded-sm bg-border animate-pulse" />
-          <div className="h-4 w-full rounded-sm bg-border animate-pulse" />
-          <div className="h-4 w-full rounded-sm bg-border animate-pulse" />
+        <div className="flex flex-col gap-5">
+          <div className="flex items-center gap-4">
+            <div className="h-14 w-14 shrink-0 rounded-full bg-border animate-pulse" />
+            <div className="flex flex-col gap-2">
+              <div className="h-4 w-40 rounded-sm bg-border animate-pulse" />
+              <div className="h-3.5 w-52 rounded-sm bg-border animate-pulse" />
+            </div>
+          </div>
+          <div className="h-6 w-28 rounded-full bg-border animate-pulse" />
+          <div className="h-24 w-full rounded-md bg-border/40 animate-pulse" />
         </div>
       ) : isError ? (
         <p className="text-body text-error">
@@ -513,11 +514,9 @@ export function Candidates() {
   const rankTask = useTask(rankTaskId);
 
   const isProcessing = processTask.data
-    ? !["SUCCESS", "FAILED", "RETRIED"].includes(processTask.data.status)
+    ? !isTerminal(processTask.data.status)
     : !!processTaskId;
-  const isRanking = rankTask.data
-    ? !["SUCCESS", "FAILED", "RETRIED"].includes(rankTask.data.status)
-    : false;
+  const isRanking = rankTask.data ? !isTerminal(rankTask.data.status) : false;
 
   // Stage 1: parse resumes. On success, chain straight into stage 2
   // (ranking) so "Rank candidates" reads as one action to the recruiter even
