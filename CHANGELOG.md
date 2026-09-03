@@ -18,6 +18,22 @@
   `docs/drift.md` row 72.
 
 ### Fixed
+- Scheduling an interview from the candidate profile could leave the
+  "Scheduling…" spinner and its loading toast stuck forever even though the
+  backend had already finished — `ScheduleInterviewButton` re-implemented
+  "is this task done" inline and only recognised `SUCCESS`/`FAILED`, missing
+  `RETRIED`, and the loading toast had no unmount cleanup so closing the
+  modal (or a list refetch) mid-flight orphaned it permanently. `isTerminal`
+  and `scheduleOutcome` are now the single source of truth (`frontend/src/lib/tasks.ts`),
+  reused by both the schedule button and the rank pipeline, and an unmount
+  effect dismisses any still-open loading toast.
+- The first click on "Schedule interview" right after opening a candidate
+  profile was often swallowed (or closed the modal outright) — the footer
+  and its button didn't exist until the candidate query resolved, so the
+  dialog reflowed and re-centered under the cursor at the exact moment the
+  button appeared. The modal now renders a same-size disabled placeholder
+  footer during load, and `Modal`'s backdrop-close only fires when both the
+  `mousedown` and `click` landed on the backdrop itself.
 - Emails and Scheduling lists silently truncated at 100 rows with no way to
   see the rest — `useEmails`/`useInterviews` fetched a single fixed
   `size=100` page and never surfaced `total`, so a recruiter with more than
