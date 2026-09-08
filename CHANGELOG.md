@@ -52,7 +52,14 @@
   horizontal bar chart for the candidate pipeline (`FunnelBarChart`) — all
   colors sourced from design tokens (`var(--color-x)`), never raw hex.
   Covers all five UX states: skeleton loading, error with retry, an empty
-  state with a "post your first job" CTA, and the populated view.
+  state with a "post your first job" CTA, and the populated view. Every KPI
+  card and chart card is a link to its full screen (Jobs, Scheduling,
+  Emails) so the dashboard doubles as navigation, not just a read-only
+  summary. The pipeline chart shows each stage's count directly on its bar
+  (`recharts` `LabelList`, with `minPointSize` so a zero-count stage still
+  renders a visible "0" instead of vanishing) plus a plain-language insight
+  line ("43% of candidates invited to interview") instead of requiring a
+  hover to read any numbers.
 - Dev tooling: `mise run db:seed-demo` (`backend/app/scripts/seed_demo.py`) rebuilds a
   full demo world — recruiter, templates, jobs across every status, candidates across
   every submission status, rankings, interview slots, email logs — built from real resumes
