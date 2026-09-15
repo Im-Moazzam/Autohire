@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Added
+- Mobile companion app (TS-11), new `mobile/` Expo/React Native project — no backend
+  changes. Screens: Dashboard, Jobs (list + detail), Candidates (per job, list +
+  detail), Scheduling (view-only), Emails (view-only). Only two write actions: reject /
+  undo-rejection on a candidate, and copying a job's application link — everything else
+  reuses the same read endpoints the web app already calls. Google sign-in reuses the
+  exact web OAuth flow via an in-app WebView. Auth reads the httponly session cookie
+  through a second, invisible, persistent WebView on the API's origin instead of a
+  native cookie-manager module — the obvious approach, tried first, crashes instantly
+  in Expo Go because third-party native modules aren't in its app binary; this needed
+  no native code and no backend change (`mobile/lib/webviewBridge.tsx`). See
+  `docs/stories/TS-11.md` and `mobile/README.md` for full scope/architecture notes.
+  `make api-client` now regenerates the mobile client alongside the web one.
+
 ### Changed
 - Collapsed the two separate AI-pipeline triggers into one. The Jobs list's
   "AI process" button is gone; the Candidates screen's action is now "Rank
