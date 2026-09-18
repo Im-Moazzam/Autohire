@@ -24,6 +24,7 @@ export default function Login() {
     return (
       <SafeAreaView className="flex-1 bg-canvas">
         <EmptyState
+          variant="info"
           title="Sign in on your phone"
           description="Google sign-in runs through a native WebView and isn't available in this browser preview. Open the app in Expo Go to sign in for real."
         />

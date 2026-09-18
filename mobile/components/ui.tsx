@@ -139,7 +139,7 @@ export function EmptyState({
   description?: string;
   actionLabel?: string;
   onAction?: () => void;
-  variant?: "empty" | "error";
+  variant?: "empty" | "error" | "info";
 }) {
   return (
     <View className="flex-1 items-center justify-center gap-3 px-8 py-16">
@@ -151,7 +151,7 @@ export function EmptyState({
         <Text
           className={`text-xl ${variant === "error" ? "text-error" : "text-primary"}`}
         >
-          {variant === "error" ? "!" : "-"}
+          {variant === "error" ? "!" : variant === "info" ? "i" : "-"}
         </Text>
       </View>
       <Text className="text-center text-card font-semibold text-ink">
