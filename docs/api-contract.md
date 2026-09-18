@@ -206,7 +206,7 @@ when wiring frontend links.
 | GET | `/candidates/{id}` | profile + responses + AI result + resume URL |
 | GET | `/candidates/{id}/resume` | US-13, not in the original TS-02 contract (drift row 37). Authenticated, ownership-scoped, streams the file. **Local mode only** — always 404 `RESUME_NOT_FOUND` in cloud mode |
 | GET | `/candidates/{id}/evidence` | Phase 2 (US-23) — out of scope |
-| GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8) |
+| GET | `/jobs/{id}/candidates/export` | `?format=csv\|xlsx`, UTF-8 BOM (defect #8). **Not implemented** — see drift row 74 |
 | PATCH | `/candidates/{id}` | status changes |
 
 `resume_url` (`CandidateOut`) is opaque to the client in either mode — the frontend
