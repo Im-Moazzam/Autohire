@@ -28,14 +28,6 @@ Two exceptions that ARE binding:
 If a requirement is ambiguous, say so and propose the resolution. Do not silently pick
 one and build on it — that is how a wrong assumption gets buried under three sprints.
 
-## Stack
-
-- Backend: Python 3.12, FastAPI, SQLAlchemy 2.x, Alembic, Pydantic v2
-- Worker: Celery + Redis
-- DB: PostgreSQL 16 + pgvector
-- Frontend: React 18, Vite, TypeScript, TailwindCSS, React Router, TanStack Query
-- Tests: pytest (backend), Vitest + React Testing Library (frontend)
-
 ## Hard rules
 
 **Database**
