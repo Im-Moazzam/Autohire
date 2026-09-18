@@ -1,9 +1,13 @@
 import Constants from "expo-constants";
+import { Platform } from "react-native";
 
 /** The phone can't resolve "localhost" to the dev machine, so the API host
  * must be a real LAN IP. Set EXPO_PUBLIC_API_HOST in mobile/.env (see
- * mobile/.env.example) to your machine's LAN IP, found via `ipconfig`. */
-const API_HOST = process.env.EXPO_PUBLIC_API_HOST;
+ * mobile/.env.example) to your machine's LAN IP, found via `ipconfig`.
+ * The browser web preview runs on the same machine as the API, and a LAN
+ * IP is cross-site there (blocks SameSite=Lax cookies) — use localhost. */
+const API_HOST =
+  Platform.OS === "web" ? "localhost" : process.env.EXPO_PUBLIC_API_HOST;
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
 
 if (!API_HOST) {

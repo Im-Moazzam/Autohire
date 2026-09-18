@@ -24,7 +24,9 @@ app = FastAPI(title="AutoHire")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url],
+    # localhost:8081 is the mobile app's `expo start --web` preview target —
+    # it talks to this same API directly, same as the web frontend.
+    allow_origins=[settings.frontend_url, "http://localhost:8081"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -43,10 +43,10 @@ class GoogleUserInfo:
     picture: str | None
 
 
-def build_auth_url(state: str) -> str:
+def build_auth_url(state: str, redirect_uri: str) -> str:
     params = {
         "client_id": settings.google_client_id,
-        "redirect_uri": settings.google_redirect_uri,
+        "redirect_uri": redirect_uri,
         "response_type": "code",
         "scope": " ".join(REQUESTED_SCOPES),
         "access_type": "offline",
@@ -56,14 +56,14 @@ def build_auth_url(state: str) -> str:
     return f"{AUTH_ENDPOINT}?{urlencode(params)}"
 
 
-def exchange_code(code: str) -> GoogleTokens:
+def exchange_code(code: str, redirect_uri: str) -> GoogleTokens:
     response = httpx.post(
         TOKEN_ENDPOINT,
         data={
             "code": code,
             "client_id": settings.google_client_id,
             "client_secret": settings.google_client_secret,
-            "redirect_uri": settings.google_redirect_uri,
+            "redirect_uri": redirect_uri,
             "grant_type": "authorization_code",
         },
         timeout=10,

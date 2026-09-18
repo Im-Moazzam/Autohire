@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -24,9 +24,16 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _COOKIE_SECURE = settings.app_env != "local"
 
 
-def _redirect_to_google_consent() -> RedirectResponse:
+def _redirect_to_google_consent(request: Request) -> RedirectResponse:
+    # Built from the incoming request's own host, not a fixed setting, so this
+    # works whether the client reached the API via localhost (web app) or a
+    # LAN IP (phone) — Google requires this to exactly match the redirect_uri
+    # used in the later token exchange, which google_callback below derives
+    # the same way (the callback request arrives at whichever host Google was
+    # given here, so both computations agree).
+    redirect_uri = str(request.url_for("google_callback"))
     nonce, signed_state = generate_state()
-    response = RedirectResponse(url=build_auth_url(signed_state), status_code=307)
+    response = RedirectResponse(url=build_auth_url(signed_state, redirect_uri), status_code=307)
     response.set_cookie(
         STATE_COOKIE,
         nonce,
@@ -39,21 +46,24 @@ def _redirect_to_google_consent() -> RedirectResponse:
 
 
 @router.get("/google/login")
-def google_login() -> RedirectResponse:
-    return _redirect_to_google_consent()
+def google_login(request: Request) -> RedirectResponse:
+    return _redirect_to_google_consent(request)
 
 
 @router.get("/google/reconnect")
-def google_reconnect(recruiter: Recruiter = Depends(get_current_recruiter)) -> RedirectResponse:
+def google_reconnect(
+    request: Request, recruiter: Recruiter = Depends(get_current_recruiter)
+) -> RedirectResponse:
     """Restart consent for the logged-in recruiter. Reuses the same state-binding
     CSRF cookie as /google/login; the existing /google/callback + upsert_recruiter
     already replace the stored tokens and flip account_state back to ACTIVE
     (retaining the existing refresh token if Google omits a new one)."""
-    return _redirect_to_google_consent()
+    return _redirect_to_google_consent(request)
 
 
 @router.get("/google/callback")
 def google_callback(
+    request: Request,
     db: Session = Depends(get_db),
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
@@ -68,7 +78,8 @@ def google_callback(
     if not verify_state(oauth_state, state) or not code:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid state")
 
-    tokens = exchange_code(code)
+    redirect_uri = str(request.url_for("google_callback"))
+    tokens = exchange_code(code, redirect_uri)
     userinfo = fetch_userinfo(tokens.access_token)
     recruiter = upsert_recruiter(db, tokens, userinfo)
 
