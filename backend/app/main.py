@@ -22,11 +22,16 @@ from app.schemas.common import ErrorOut
 
 app = FastAPI(title="AutoHire")
 
+_cors_origins = [settings.frontend_url]
+if settings.app_env == "local":
+    # localhost:8081 is the mobile app's `expo start --web` preview target —
+    # it talks to this same API directly, same as the web frontend. Local-only,
+    # same pattern as _COOKIE_SECURE in api/routes/auth.py.
+    _cors_origins.append("http://localhost:8081")
+
 app.add_middleware(
     CORSMiddleware,
-    # localhost:8081 is the mobile app's `expo start --web` preview target —
-    # it talks to this same API directly, same as the web frontend.
-    allow_origins=[settings.frontend_url, "http://localhost:8081"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
