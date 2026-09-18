@@ -40,12 +40,14 @@ const itemMotion = {
 };
 
 function KpiCard({
+  to,
   icon,
   label,
   value,
   tone,
   breakdown,
 }: {
+  to: string;
   icon: React.ReactNode;
   label: string;
   value: number;
@@ -60,36 +62,38 @@ function KpiCard({
   }[tone];
 
   return (
-    <motion.div
-      variants={itemMotion}
-      className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-card"
-    >
-      <div className="flex items-center justify-between">
-        <span
-          className={`flex h-11 w-11 items-center justify-center rounded-full ${toneClasses}`}
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-      </div>
-      <div>
-        <div className="text-page font-semibold text-ink">
-          <AnimatedNumber value={value} />
+    <motion.div variants={itemMotion}>
+      <Link
+        to={to}
+        className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-card transition-shadow hover:shadow-lg hover:border-primary/40"
+      >
+        <div className="flex items-center justify-between">
+          <span
+            className={`flex h-11 w-11 items-center justify-center rounded-full ${toneClasses}`}
+            aria-hidden="true"
+          >
+            {icon}
+          </span>
         </div>
-        <div className="text-body text-muted">{label}</div>
-      </div>
-      {breakdown.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {breakdown.map(([name, count]) => (
-            <span
-              key={name}
-              className="rounded-full bg-canvas px-2.5 py-1 text-helper text-muted"
-            >
-              {count} {name}
-            </span>
-          ))}
+        <div>
+          <div className="text-page font-semibold text-ink">
+            <AnimatedNumber value={value} />
+          </div>
+          <div className="text-body text-muted">{label}</div>
         </div>
-      )}
+        {breakdown.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {breakdown.map(([name, count]) => (
+              <span
+                key={name}
+                className="rounded-full bg-canvas px-2.5 py-1 text-helper text-muted"
+              >
+                {count} {name}
+              </span>
+            ))}
+          </div>
+        )}
+      </Link>
     </motion.div>
   );
 }
@@ -279,6 +283,7 @@ export function Dashboard() {
         className="grid grid-cols-4 gap-5"
       >
         <KpiCard
+          to="/jobs"
           icon={<BriefcaseIcon className="h-5 w-5" />}
           label="Jobs"
           value={data.total_jobs}
@@ -289,6 +294,7 @@ export function Dashboard() {
           ])}
         />
         <KpiCard
+          to="/jobs"
           icon={<UsersIcon className="h-5 w-5" />}
           label="Candidates"
           value={data.total_candidates}
@@ -299,6 +305,7 @@ export function Dashboard() {
           ])}
         />
         <KpiCard
+          to="/scheduling"
           icon={<CalendarIcon className="h-5 w-5" />}
           label="Interviews"
           value={data.total_interviews}
@@ -309,6 +316,7 @@ export function Dashboard() {
           ])}
         />
         <KpiCard
+          to="/emails"
           icon={<MailIcon className="h-5 w-5" />}
           label="Emails sent"
           value={data.total_emails}
@@ -325,21 +333,40 @@ export function Dashboard() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.15 }}
       >
-        <Card title="Candidate pipeline">
-          <FunnelBarChart data={funnelData} />
-          {offPath.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-2 border-t border-border pt-4">
-              {offPath.map(([label, count]) => (
-                <span
-                  key={label}
-                  className="rounded-full bg-canvas px-2.5 py-1 text-helper text-muted"
-                >
-                  {count} {label}
-                </span>
-              ))}
-            </div>
-          )}
-        </Card>
+        <Link to="/jobs" className="block">
+          <Card
+            title="Candidate pipeline"
+            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+          >
+            <FunnelBarChart data={funnelData} />
+            {data.total_candidates > 0 && (
+              <p className="mt-2 text-body text-muted">
+                <span className="font-semibold text-ink">
+                  {Math.round(
+                    ((data.candidates_by_status.INVITED ?? 0) /
+                      data.total_candidates) *
+                      100,
+                  )}
+                  %
+                </span>{" "}
+                of candidates ({data.candidates_by_status.INVITED ?? 0} of{" "}
+                {data.total_candidates}) have been invited to interview.
+              </p>
+            )}
+            {offPath.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2 border-t border-border pt-4">
+                {offPath.map(([label, count]) => (
+                  <span
+                    key={label}
+                    className="rounded-full bg-canvas px-2.5 py-1 text-helper text-muted"
+                  >
+                    {count} {label}
+                  </span>
+                ))}
+              </div>
+            )}
+          </Card>
+        </Link>
       </motion.div>
 
       <motion.div
@@ -348,24 +375,39 @@ export function Dashboard() {
         transition={{ duration: 0.45, delay: 0.25 }}
         className="grid grid-cols-3 gap-6"
       >
-        <Card title="Jobs by status">
-          <DonutChart data={jobsDonut} total={data.total_jobs} />
-          <div className="mt-4">
-            <DonutLegend data={jobsDonut} />
-          </div>
-        </Card>
-        <Card title="Interviews">
-          <DonutChart data={interviewsDonut} total={data.total_interviews} />
-          <div className="mt-4">
-            <DonutLegend data={interviewsDonut} />
-          </div>
-        </Card>
-        <Card title="Email delivery">
-          <DonutChart data={emailsDonut} total={data.total_emails} />
-          <div className="mt-4">
-            <DonutLegend data={emailsDonut} />
-          </div>
-        </Card>
+        <Link to="/jobs" className="block">
+          <Card
+            title="Jobs by status"
+            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+          >
+            <DonutChart data={jobsDonut} total={data.total_jobs} />
+            <div className="mt-4">
+              <DonutLegend data={jobsDonut} />
+            </div>
+          </Card>
+        </Link>
+        <Link to="/scheduling" className="block">
+          <Card
+            title="Interviews"
+            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+          >
+            <DonutChart data={interviewsDonut} total={data.total_interviews} />
+            <div className="mt-4">
+              <DonutLegend data={interviewsDonut} />
+            </div>
+          </Card>
+        </Link>
+        <Link to="/emails" className="block">
+          <Card
+            title="Email delivery"
+            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+          >
+            <DonutChart data={emailsDonut} total={data.total_emails} />
+            <div className="mt-4">
+              <DonutLegend data={emailsDonut} />
+            </div>
+          </Card>
+        </Link>
       </motion.div>
     </div>
   );

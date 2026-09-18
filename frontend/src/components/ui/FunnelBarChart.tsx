@@ -2,6 +2,7 @@ import {
   Bar,
   BarChart,
   Cell,
+  LabelList,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,6 +50,7 @@ export function FunnelBarChart({ data, height = 280 }: FunnelBarChartProps) {
         <Bar
           dataKey="value"
           radius={[0, 6, 6, 0]}
+          minPointSize={2}
           isAnimationActive
           animationDuration={900}
           animationEasing="ease-out"
@@ -56,6 +58,13 @@ export function FunnelBarChart({ data, height = 280 }: FunnelBarChartProps) {
           {data.map((d) => (
             <Cell key={d.label} fill={d.color} />
           ))}
+          <LabelList
+            dataKey="value"
+            position="right"
+            fill="var(--color-ink)"
+            fontSize={13}
+            fontWeight={600}
+          />
         </Bar>
       </BarChart>
     </ResponsiveContainer>
