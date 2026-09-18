@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import Svg, { Path } from "react-native-svg";
 import type { WebViewNavigation } from "react-native-webview";
 import { Button, EmptyState } from "../components/ui";
 import { authCompleteUrlPattern, googleLoginUrl } from "../lib/config";
@@ -73,8 +74,16 @@ export default function Login() {
 
   return (
     <SafeAreaView className="flex-1 items-center justify-center gap-6 bg-canvas px-8">
-      <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary">
-        <Text className="text-2xl font-extrabold text-white">A</Text>
+      <View className="h-16 w-16 items-center justify-center rounded-2xl bg-primary-soft">
+        <Svg viewBox="0 0 24 24" width={36} height={36} fill="none">
+          <Path
+            d="M4 17 12 6 20 17"
+            stroke="#0058BE"
+            strokeWidth={3.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
       </View>
       <View className="items-center gap-2">
         <Text className="text-page font-semibold text-ink">AutoHire</Text>

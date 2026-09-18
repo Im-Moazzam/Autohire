@@ -204,11 +204,15 @@ export function Home() {
       <header className="sticky top-0 z-10 border-b border-border/60 bg-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between px-6 py-4 sm:px-10">
           <div className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-primary text-white" aria-hidden="true">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                <path d="M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.4l-6.3 4.4 2.3-7.2-6-4.4h7.6z" />
-              </svg>
-            </span>
+            <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary" fill="none" aria-hidden="true">
+              <path
+                d="M4 17 12 6 20 17"
+                stroke="currentColor"
+                strokeWidth={3.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
             <span className="text-card font-extrabold">AutoHire</span>
           </div>
           <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
@@ -342,11 +346,15 @@ export function Home() {
         <div className="mx-auto flex max-w-[1280px] flex-col gap-8 px-6 py-12 sm:flex-row sm:items-start sm:justify-between sm:px-10">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 items-center justify-center rounded-sm bg-primary text-white" aria-hidden="true">
-                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-                  <path d="M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.4l-6.3 4.4 2.3-7.2-6-4.4h7.6z" />
-                </svg>
-              </span>
+              <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary" fill="none" aria-hidden="true">
+              <path
+                d="M4 17 12 6 20 17"
+                stroke="currentColor"
+                strokeWidth={3.2}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
               <span className="text-card font-extrabold">AutoHire</span>
             </div>
             <p className="max-w-[320px] text-body text-ink/80">
