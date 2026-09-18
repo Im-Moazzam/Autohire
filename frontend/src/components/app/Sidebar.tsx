@@ -160,14 +160,15 @@ export function Sidebar() {
   return (
     <aside className="flex h-screen w-[260px] shrink-0 flex-col border-r border-border bg-surface p-4">
       <div className="flex items-center gap-2 px-2 pb-4">
-        <span
-          className="flex h-6 w-6 items-center justify-center rounded-sm bg-primary text-white"
-          aria-hidden="true"
-        >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor">
-            <path d="M12 2l2.4 7.2H22l-6 4.4 2.3 7.2L12 16.4l-6.3 4.4 2.3-7.2-6-4.4h7.6z" />
-          </svg>
-        </span>
+        <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary" fill="none" aria-hidden="true">
+          <path
+            d="M4 17 12 6 20 17"
+            stroke="currentColor"
+            strokeWidth={3.2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
         <span className="text-card font-extrabold">AutoHire</span>
       </div>
 

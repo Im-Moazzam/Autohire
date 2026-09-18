@@ -36,10 +36,11 @@ lint:
 	pre-commit run --all-files
 
 ## ---- Contract ----
-api-client: ## regenerate the typed frontend client from the live API
+api-client: ## regenerate the typed frontend + mobile clients from the live API
 	docker compose exec -T api python -m app.scripts.dump_openapi > docs/openapi.json
 	npx openapi-typescript docs/openapi.json -o frontend/src/lib/api.d.ts
-	@echo "regenerated. commit both files together."
+	npx openapi-typescript docs/openapi.json -o mobile/lib/api.d.ts
+	@echo "regenerated. commit all three files together."
 
 ## ---- Generated documentation (never hand-maintained) ----
 docs: docs-api docs-erd docs-uml docs-tests
