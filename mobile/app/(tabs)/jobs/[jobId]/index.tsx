@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from "expo-clipboard";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -89,6 +90,13 @@ export default function JobDetailScreen() {
               label={copied ? "Copied!" : "Copy application link"}
               onPress={copyLink}
               variant={copied ? "secondary" : "primary"}
+              icon={
+                <Ionicons
+                  name={copied ? "checkmark" : "link-outline"}
+                  size={18}
+                  color={copied ? "#0F172A" : "#FFFFFF"}
+                />
+              }
             />
           </Card>
         ) : null}
@@ -102,6 +110,7 @@ export default function JobDetailScreen() {
           label="View candidates"
           variant="secondary"
           onPress={() => router.push(`/jobs/${data.job_id}/candidates`)}
+          icon={<Ionicons name="people-outline" size={18} color="#0F172A" />}
         />
       </ScrollView>
     </SafeAreaView>

@@ -17,6 +17,22 @@
   `make api-client` now regenerates the mobile client alongside the web one.
 
 ### Changed
+- Mobile (TS-11) UI/UX polish pass, same design tokens throughout (no palette
+  change): shared `Avatar` and `IconBubble` primitives in `components/ui.tsx`;
+  real Ionicons instead of text glyphs in `EmptyState`; `PressableCard` rows
+  get a trailing chevron; tab bar swaps outline/filled icons on focus. Dashboard
+  KPI tiles get a tone icon instead of a bare color bar. Rebuilt the candidate
+  pipeline chart as flex-width bars — the previous `react-native-gifted-charts`
+  `BarChart` needed pixel-tuned `barWidth`/`spacing`/`labelWidth`/`height` that
+  clipped on real phones. Fixed the dashboard donut cards: the `wide` prop on
+  the email-delivery card was dead code (`wide ? "flex-1" : "flex-1"`), and the
+  legend was capped to `topEntries(4)` while the pie plotted every nonzero
+  status — on Scheduling's 5 statuses a wedge could have no matching legend
+  row. Pie slices and legend rows now come from one shared sorted list. Each
+  donut card is now tappable, opening a bottom sheet with every status's
+  color, count, and a one-line description (`JOB_STATUS_DESCRIPTIONS`,
+  `SLOT_STATUS_DESCRIPTIONS`, `DELIVERY_STATUS_DESCRIPTIONS` in their
+  respective `lib/*.ts`).
 - Collapsed the two separate AI-pipeline triggers into one. The Jobs list's
   "AI process" button is gone; the Candidates screen's action is now "Rank
   candidates" and runs both stages back to back — parse resumes, then rank

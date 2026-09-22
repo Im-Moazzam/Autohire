@@ -1,7 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { Linking, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Avatar,
   Badge,
   Button,
   Card,
@@ -52,7 +54,8 @@ export default function CandidateDetailScreen() {
         className="flex-1 px-4"
         contentContainerClassName="gap-4 py-4"
       >
-        <View className="flex-row items-start justify-between gap-2">
+        <View className="flex-row items-start gap-3">
+          <Avatar name={data.full_name} size={48} />
           <View className="flex-1">
             <Text className="text-page font-semibold text-ink">
               {data.full_name}
@@ -70,7 +73,10 @@ export default function CandidateDetailScreen() {
 
         {data.parse_error ? (
           <Card className="border-error/30 bg-error/5">
-            <SectionLabel>Resume parse failed</SectionLabel>
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="warning-outline" size={16} color="#DC2626" />
+              <SectionLabel>Resume parse failed</SectionLabel>
+            </View>
             <Text className="text-body text-error">{data.parse_error}</Text>
           </Card>
         ) : null}
@@ -85,6 +91,7 @@ export default function CandidateDetailScreen() {
 
         {isInvited ? (
           <View className="flex-row items-center justify-center gap-2 rounded-control bg-success/10 px-4 py-3">
+            <Ionicons name="checkmark-circle" size={18} color="#16A34A" />
             <Text className="text-body font-semibold text-success">
               Invite sent for interview
             </Text>

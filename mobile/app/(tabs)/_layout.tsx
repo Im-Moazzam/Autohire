@@ -15,8 +15,12 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: "Dashboard",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="grid-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "grid" : "grid-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -24,8 +28,12 @@ export default function TabsLayout() {
         name="jobs"
         options={{
           title: "Jobs",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="briefcase-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "briefcase" : "briefcase-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -33,8 +41,12 @@ export default function TabsLayout() {
         name="scheduling"
         options={{
           title: "Scheduling",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="calendar-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "calendar" : "calendar-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />
@@ -42,8 +54,12 @@ export default function TabsLayout() {
         name="emails"
         options={{
           title: "Emails",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mail-outline" size={size} color={color} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "mail" : "mail-outline"}
+              size={size}
+              color={color}
+            />
           ),
         }}
       />

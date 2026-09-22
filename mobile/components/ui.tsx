@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { ReactNode, useState } from "react";
 import { ActivityIndicator, Pressable, Text, View } from "react-native";
 
@@ -13,6 +14,17 @@ const TONE_CLASSES: Record<string, { bg: string; text: string }> = {
   warning: { bg: "bg-warning/10", text: "text-warning" },
   error: { bg: "bg-error/10", text: "text-error" },
   muted: { bg: "bg-muted/10", text: "text-muted" },
+};
+
+const TONE_HEX: Record<string, string> = {
+  primary: "#0058BE",
+  navy: "#0F172A",
+  cyan: "#06B6D4",
+  ai: "#7C3AED",
+  success: "#16A34A",
+  warning: "#F59E0B",
+  error: "#DC2626",
+  muted: "#64748B",
 };
 
 export function Badge({
@@ -50,10 +62,12 @@ export function PressableCard({
   children,
   onPress,
   className = "",
+  chevron = true,
 }: {
   children: ReactNode;
   onPress: () => void;
   className?: string;
+  chevron?: boolean;
 }) {
   const [pressed, setPressed] = useState(false);
   return (
@@ -63,8 +77,63 @@ export function PressableCard({
       onPressOut={() => setPressed(false)}
       className={`rounded-card border border-border bg-surface p-4 shadow-sm ${pressed ? "opacity-60" : ""} ${className}`}
     >
-      {children}
+      <View className="flex-row items-center gap-2">
+        <View className="flex-1">{children}</View>
+        {chevron ? (
+          <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+        ) : null}
+      </View>
     </Pressable>
+  );
+}
+
+export function Avatar({
+  name,
+  size = 40,
+  tone = "primary",
+}: {
+  name: string;
+  size?: number;
+  tone?: string;
+}) {
+  const initial = name?.trim()?.[0]?.toUpperCase() ?? "?";
+  const { bg, text } = TONE_CLASSES[tone] ?? TONE_CLASSES.primary;
+  return (
+    <View
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      className={`items-center justify-center ${bg}`}
+    >
+      <Text
+        style={{ fontSize: size * 0.42 }}
+        className={`font-semibold ${text}`}
+      >
+        {initial}
+      </Text>
+    </View>
+  );
+}
+
+export function IconBubble({
+  name,
+  tone = "primary",
+  size = 36,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  tone?: string;
+  size?: number;
+}) {
+  const { bg } = TONE_CLASSES[tone] ?? TONE_CLASSES.primary;
+  return (
+    <View
+      style={{ width: size, height: size, borderRadius: size / 2 }}
+      className={`items-center justify-center ${bg}`}
+    >
+      <Ionicons
+        name={name}
+        size={size * 0.52}
+        color={TONE_HEX[tone] ?? TONE_HEX.primary}
+      />
+    </View>
   );
 }
 
@@ -141,18 +210,25 @@ export function EmptyState({
   onAction?: () => void;
   variant?: "empty" | "error" | "info";
 }) {
+  const iconName =
+    variant === "error"
+      ? "alert-circle-outline"
+      : variant === "info"
+        ? "information-circle-outline"
+        : "file-tray-outline";
+
   return (
     <View className="flex-1 items-center justify-center gap-3 px-8 py-16">
       <View
-        className={`h-12 w-12 items-center justify-center rounded-full ${
+        className={`h-14 w-14 items-center justify-center rounded-full ${
           variant === "error" ? "bg-error/10" : "bg-primary-soft"
         }`}
       >
-        <Text
-          className={`text-xl ${variant === "error" ? "text-error" : "text-primary"}`}
-        >
-          {variant === "error" ? "!" : variant === "info" ? "i" : "-"}
-        </Text>
+        <Ionicons
+          name={iconName}
+          size={28}
+          color={variant === "error" ? "#DC2626" : "#0058BE"}
+        />
       </View>
       <Text className="text-center text-card font-semibold text-ink">
         {title}
