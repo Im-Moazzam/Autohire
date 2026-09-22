@@ -62,10 +62,10 @@ function KpiCard({
   }[tone];
 
   return (
-    <motion.div variants={itemMotion}>
+    <motion.div variants={itemMotion} className="h-full">
       <Link
         to={to}
-        className="flex flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-card transition-shadow hover:shadow-lg hover:border-primary/40"
+        className="flex h-full flex-col gap-4 rounded-card border border-border bg-surface p-6 shadow-card transition-shadow hover:shadow-lg hover:border-primary/40"
       >
         <div className="flex items-center justify-between">
           <span
@@ -375,10 +375,10 @@ export function Dashboard() {
         transition={{ duration: 0.45, delay: 0.25 }}
         className="grid grid-cols-3 gap-6"
       >
-        <Link to="/jobs" className="block">
+        <Link to="/jobs" className="block h-full">
           <Card
             title="Jobs by status"
-            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+            className="h-full transition-shadow hover:shadow-lg hover:border-primary/40"
           >
             <DonutChart data={jobsDonut} total={data.total_jobs} />
             <div className="mt-4">
@@ -386,10 +386,10 @@ export function Dashboard() {
             </div>
           </Card>
         </Link>
-        <Link to="/scheduling" className="block">
+        <Link to="/scheduling" className="block h-full">
           <Card
             title="Interviews"
-            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+            className="h-full transition-shadow hover:shadow-lg hover:border-primary/40"
           >
             <DonutChart data={interviewsDonut} total={data.total_interviews} />
             <div className="mt-4">
@@ -397,10 +397,10 @@ export function Dashboard() {
             </div>
           </Card>
         </Link>
-        <Link to="/emails" className="block">
+        <Link to="/emails" className="block h-full">
           <Card
             title="Email delivery"
-            className="transition-shadow hover:shadow-lg hover:border-primary/40"
+            className="h-full transition-shadow hover:shadow-lg hover:border-primary/40"
           >
             <DonutChart data={emailsDonut} total={data.total_emails} />
             <div className="mt-4">
