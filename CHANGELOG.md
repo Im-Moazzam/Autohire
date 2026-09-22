@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Recruiter Settings page (TS-13) at `/settings`: edit name, sign out, Google
+  connection status with reconnect, and a link to Scheduling's interview
+  availability. No backend changes — every piece of data and mutation it uses
+  already existed (`PATCH /recruiters/me`, `account_state`, the reconnect
+  flow); only a new `useUpdateRecruiter()` hook was missing.
 - Mobile companion app (TS-11), new `mobile/` Expo/React Native project — no backend
   changes. Screens: Dashboard, Jobs (list + detail), Candidates (per job, list +
   detail), Scheduling (view-only), Emails (view-only). Only two write actions: reject /
@@ -17,6 +22,10 @@
   `make api-client` now regenerates the mobile client alongside the web one.
 
 ### Changed
+- Removed "Candidates" and "Admin Monitoring" from the sidebar (TS-13) — both
+  were permanently disabled placeholders with no route. Candidates has no
+  standalone screen (always viewed per-job); Admin Monitoring is being
+  rebuilt as a separate, admin-only route not linked from the sidebar (TS-14).
 - Mobile (TS-11) UI/UX polish pass, same design tokens throughout (no palette
   change): shared `Avatar` and `IconBubble` primitives in `components/ui.tsx`;
   real Ionicons instead of text glyphs in `EmptyState`; `PressableCard` rows
