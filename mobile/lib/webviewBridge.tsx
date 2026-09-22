@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import WebView, { type WebViewMessageEvent } from "react-native-webview";
 import { API_ORIGIN } from "./config";
 
@@ -116,21 +116,32 @@ export function WebViewBridge() {
   const ref = useRef<WebView>(null);
 
   return (
-    <WebView
-      ref={(instance) => {
-        ref.current = instance;
-        webviewRef = instance;
-      }}
-      source={{ uri: `${API_ORIGIN}/docs` }}
-      onLoadEnd={markReady}
-      onMessage={onMessage}
-      style={styles.hidden}
-    />
+    // A zero-size, overflow-hidden wrapper — not just `position: absolute`
+    // on the WebView itself — because Android's native WebView doesn't
+    // always honor absolute positioning by the time it first lays out,
+    // and was briefly taking up real space as a root-level sibling of the
+    // app's actual content, pushing every screen down into the bottom
+    // half of the display. A 0x0 clipped View always contributes zero
+    // layout space, regardless of how the WebView inside sizes itself.
+    <View style={styles.hiddenContainer} pointerEvents="none">
+      <WebView
+        ref={(instance) => {
+          ref.current = instance;
+          webviewRef = instance;
+        }}
+        source={{ uri: `${API_ORIGIN}/docs` }}
+        onLoadEnd={markReady}
+        onMessage={onMessage}
+        style={styles.hiddenWebview}
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  hiddenContainer: { width: 0, height: 0, overflow: "hidden" },
   // Not `display: none` — some WebView implementations pause/never load a
-  // display:none view. 1x1 and clipped off-screen keeps it fully alive.
-  hidden: { position: "absolute", top: -1000, left: 0, width: 1, height: 1 },
+  // display:none view. A real (non-zero) size inside the clipped wrapper
+  // keeps it fully alive.
+  hiddenWebview: { width: 1, height: 1 },
 });
