@@ -5,18 +5,25 @@ import { Platform } from "react-native";
  * must be a real LAN IP. Set EXPO_PUBLIC_API_HOST in mobile/.env (see
  * mobile/.env.example) to your machine's LAN IP, found via `ipconfig`.
  * The browser web preview runs on the same machine as the API, and a LAN
- * IP is cross-site there (blocks SameSite=Lax cookies) — use localhost. */
+ * IP is cross-site there (blocks SameSite=Lax cookies) — use localhost.
+ *
+ * Google OAuth rejects raw LAN IPs as a redirect_uri (public-domain-only
+ * policy), so real-phone Google sign-in needs a tunnel (e.g. `ngrok http
+ * api:8000`) instead. Set EXPO_PUBLIC_API_ORIGIN to the tunnel's full
+ * https URL to use that instead of HOST/PORT — it's registered as the
+ * Google Cloud Console redirect URI the same way a LAN IP would be. */
 const API_HOST =
   Platform.OS === "web" ? "localhost" : process.env.EXPO_PUBLIC_API_HOST;
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "8000";
 
-if (!API_HOST) {
+if (!process.env.EXPO_PUBLIC_API_ORIGIN && !API_HOST) {
   throw new Error(
-    "EXPO_PUBLIC_API_HOST is not set — copy mobile/.env.example to mobile/.env and set it to your machine's LAN IP (see mobile/README.md).",
+    "Neither EXPO_PUBLIC_API_ORIGIN nor EXPO_PUBLIC_API_HOST is set — copy mobile/.env.example to mobile/.env (see mobile/README.md).",
   );
 }
 
-export const API_ORIGIN = `http://${API_HOST}:${API_PORT}`;
+export const API_ORIGIN =
+  process.env.EXPO_PUBLIC_API_ORIGIN ?? `http://${API_HOST}:${API_PORT}`;
 export const API_URL = `${API_ORIGIN}/api/v1`;
 
 /** Same redirect-chain login the web app uses (login -> Google consent ->

@@ -38,8 +38,13 @@ less width than the web app's 1440px frame.
    container already binds `0.0.0.0:8000`, so it's reachable from any device on the
    same network once this is set correctly.
 3. Make sure the backend is running (`docker compose up -d` from the repo root).
-4. `npx expo start` — scan the QR code with the **Expo Go** app (Android/iOS) to run it
-   on your phone, or press `w` to open the web-preview target in a browser.
+4. `npx expo start --host lan` — scan the QR code with the **Expo Go** app (Android/iOS)
+   to run it on your phone, or `npx expo start --web` for the browser-preview target
+   (Google sign-in doesn't work there — see Auth below).
+
+Without Google sign-in, steps 1–4 are enough to see every screen (they'll just show the
+"not authenticated" empty state). **Real sign-in on a phone needs one more one-time
+step** — see the tunnel setup in Auth below, or you'll hit `redirect_uri_mismatch`.
 
 ## Auth
 
@@ -61,6 +66,39 @@ real browser tab does for the web app. `lib/http.ts` relays every API call's
 request/response across that JS bridge on native, and just uses a normal
 `credentials: "include"` fetch directly on web (no bridge needed there — a browser tab
 already has its own cookie jar).
+
+### One-time setup: real Google sign-in on a physical phone
+
+Google's OAuth policy rejects a raw LAN IP as a `redirect_uri` — no exceptions, for
+anyone (`localhost` is the *only* hardcoded carve-out, and a phone can't use that to
+reach your dev machine). So testing real sign-in on-device needs the backend fronted by
+a real public HTTPS domain instead of your LAN IP. A free ngrok static domain solves
+this with a one-time setup — do this once, ever, not per session:
+
+1. Claim a free static domain at <https://dashboard.ngrok.com/domains>.
+2. Save your authtoken (from <https://dashboard.ngrok.com/get-started/your-authtoken>)
+   into the config the Docker image's entrypoint actually reads — note this is **not**
+   the path `ngrok config add-authtoken` defaults to:
+   ```sh
+   docker run --rm -v ngrok-config:/var/lib/ngrok --entrypoint sh ngrok/ngrok -c '
+   rm -f /var/lib/ngrok/ngrok.yml
+   printf "version: 3\nagent:\n    authtoken: %s\n    web_addr: 0.0.0.0:4040\n" "<your-authtoken>" > /var/lib/ngrok/ngrok.yml'
+   ```
+3. Register `https://<your-domain>/api/v1/auth/google/callback` as an Authorized
+   redirect URI on the OAuth client in Google Cloud Console. One-time — the domain
+   never changes, so you never touch this again.
+4. Set `EXPO_PUBLIC_API_ORIGIN=https://<your-domain>` in `mobile/.env` (overrides
+   `EXPO_PUBLIC_API_HOST`/`PORT` when set — see `.env.example`).
+
+Then every time you want to test real sign-in (from the repo root, backend already up):
+
+```sh
+docker run --network autohire_default -v ngrok-config:/var/lib/ngrok --rm ngrok/ngrok http api:8000 --url=https://<your-domain>
+```
+
+Leave that running, then `npx expo start --host lan` as usual. Without this, every
+screen still works — sign-in just won't complete on a real device (the web preview's
+info screen explains this; see the `Platform.OS === "web"` branch in `app/login.tsx`).
 
 ## Debugging note (react-native-web preview)
 
