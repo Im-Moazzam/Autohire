@@ -13,6 +13,7 @@ import { Candidates } from "./pages/Candidates";
 import { Scheduling } from "./pages/Scheduling";
 import { Emails } from "./pages/Emails";
 import { Settings } from "./pages/Settings";
+import { Admin } from "./pages/Admin";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -43,6 +44,10 @@ export const router = createBrowserRouter([
       { path: "/scheduling", element: <Scheduling /> },
       { path: "/emails", element: <Emails /> },
       { path: "/settings", element: <Settings /> },
+      // Deliberately not in Sidebar's NAV_ITEMS — admin-only, gated
+      // server-side by get_current_admin and client-side by Admin's own
+      // redirect-on-403. Reachable only by typing the URL.
+      { path: "/admin", element: <Admin /> },
     ],
   },
   {

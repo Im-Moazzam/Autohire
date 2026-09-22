@@ -23,7 +23,10 @@ export type Status =
   | "Connected"
   | "Disconnected"
   | "Syncing"
-  | "Quota Warning";
+  | "Quota Warning"
+  | "Suspended"
+  | "Reauth Required"
+  | "Retried";
 
 type Tone = "success" | "warning" | "error" | "primary" | "ai" | "muted";
 
@@ -53,6 +56,9 @@ const statusTone: Record<Status, Tone> = {
   Disconnected: "muted",
   Syncing: "ai",
   "Quota Warning": "warning",
+  Suspended: "error",
+  "Reauth Required": "warning",
+  Retried: "warning",
 };
 
 const toneClasses: Record<Tone, string> = {
