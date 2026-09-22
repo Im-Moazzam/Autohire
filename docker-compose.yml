@@ -28,7 +28,12 @@ services:
 
   api:
     build: ./backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # --proxy-headers/--forwarded-allow-ips: local dev only, so the ngrok
+    # tunnel container (fronts this over HTTPS, forwards over plain HTTP)
+    # can tell uvicorn the real scheme — otherwise request.url_for() in
+    # auth.py builds an http:// redirect_uri that never matches what's
+    # registered in Google Cloud Console.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers --forwarded-allow-ips='*'
     env_file: .env
     # docs-uml and docs-tests (Makefile) write to /app/../docs/generated, i.e.
     # /docs/generated inside this container — mount ./docs so it lands on the host.
