@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "./components/app/AppShell";
+import { AdminShell } from "./components/app/AdminShell";
 import { PublicLayout } from "./components/app/PublicLayout";
 import { Home } from "./pages/Home";
 import { Apply } from "./pages/Apply";
@@ -44,11 +45,15 @@ export const router = createBrowserRouter([
       { path: "/scheduling", element: <Scheduling /> },
       { path: "/emails", element: <Emails /> },
       { path: "/settings", element: <Settings /> },
-      // Deliberately not in Sidebar's NAV_ITEMS — admin-only, gated
-      // server-side by get_current_admin and client-side by Admin's own
-      // redirect-on-403. Reachable only by typing the URL.
-      { path: "/admin", element: <Admin /> },
     ],
+  },
+  {
+    // Deliberately not AppShell/Sidebar — a separate, hidden operator tool,
+    // not another item inside the normal recruiter shell. Gated server-side
+    // by get_current_admin and client-side by Admin's own redirect-on-403.
+    // Reachable only by typing the URL.
+    element: <AdminShell />,
+    children: [{ path: "/admin", element: <Admin /> }],
   },
   {
     element: <PublicLayout />,
