@@ -9,6 +9,7 @@ import {
   type SelectOption,
 } from "../components/ui";
 import { buttonClassName } from "../components/ui/Button";
+import { ArrowDownIcon, ArrowUpIcon, TrashIcon } from "../components/ui/icons";
 import { useToast } from "../components/ui/Toast";
 import { apiErrorCode, apiErrorMessage } from "../lib/http";
 import { hasIdentityFields } from "../lib/identityFields";
@@ -132,7 +133,7 @@ export function TemplateBuilder() {
         />
         <Link
           to="/templates"
-          className="mt-4 inline-block text-body text-primary hover:underline"
+          className="mt-4 inline-block text-body text-primary transition-colors hover:underline"
         >
           Back to templates
         </Link>
@@ -252,7 +253,10 @@ export function TemplateBuilder() {
         <h1 className="text-page font-semibold">
           {isEditing ? "Edit template" : "Create template"}
         </h1>
-        <Link to="/templates" className="text-body text-muted hover:text-ink">
+        <Link
+          to="/templates"
+          className="text-body text-muted transition-colors hover:text-ink"
+        >
           Cancel
         </Link>
       </div>
@@ -276,7 +280,7 @@ export function TemplateBuilder() {
             <button
               type="button"
               onClick={addField}
-              className="mt-2 text-body text-primary hover:underline"
+              className="mt-2 text-body text-primary transition-colors hover:underline"
             >
               Add your first field
             </button>
@@ -321,7 +325,7 @@ export function TemplateBuilder() {
                       }
                     />
                   )}
-                  <label className="flex items-center gap-2 text-body">
+                  <label className="flex items-center gap-2 text-body text-ink">
                     <input
                       type="checkbox"
                       checked={field.is_required}
@@ -330,6 +334,7 @@ export function TemplateBuilder() {
                           is_required: e.target.checked,
                         })
                       }
+                      className="h-4 w-4 cursor-pointer rounded-sm accent-primary"
                     />
                     Required
                   </label>
@@ -340,26 +345,27 @@ export function TemplateBuilder() {
                     onClick={() => moveField(index, -1)}
                     disabled={index === 0}
                     aria-label="Move field up"
-                    className="text-muted hover:text-ink disabled:opacity-30"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-primary-soft hover:text-primary disabled:pointer-events-none disabled:opacity-30"
                   >
-                    ↑
+                    <ArrowUpIcon className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => moveField(index, 1)}
                     disabled={index === fields.length - 1}
                     aria-label="Move field down"
-                    className="text-muted hover:text-ink disabled:opacity-30"
+                    className="flex h-8 w-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-primary-soft hover:text-primary disabled:pointer-events-none disabled:opacity-30"
                   >
-                    ↓
+                    <ArrowDownIcon className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => removeField(field.key)}
                     aria-label="Remove field"
-                    className="mt-2 text-error hover:underline"
+                    title="Remove field"
+                    className="mt-2 flex h-8 w-8 items-center justify-center rounded-full text-error transition-colors hover:bg-error/10"
                   >
-                    Remove
+                    <TrashIcon className="h-4 w-4" />
                   </button>
                 </div>
               </div>
@@ -371,7 +377,7 @@ export function TemplateBuilder() {
           <button
             type="button"
             onClick={addField}
-            className="self-start rounded-control border border-dashed border-border px-4 py-2 text-body text-primary hover:bg-primary-soft"
+            className="self-start rounded-control border border-dashed border-border px-4 py-2 text-body text-primary transition-colors hover:bg-primary-soft"
           >
             + Add field
           </button>
