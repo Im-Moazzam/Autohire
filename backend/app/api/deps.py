@@ -4,15 +4,17 @@ from collections.abc import Generator
 from fastapi import Cookie, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.db import SessionLocal
 from app.models.candidate import Candidate
 from app.models.job import JobPosting
-from app.models.recruiter import Recruiter
+from app.models.recruiter import Recruiter, RecruiterState
 from app.models.template import FormTemplate
 from app.services import candidate_service, job_service, template_service
 from app.services.auth_service import SESSION_COOKIE, read_session_cookie
 
 _NOT_AUTHENTICATED = {"code": "NOT_AUTHENTICATED", "message": "not authenticated"}
+_NOT_AUTHORIZED = {"code": "NOT_AUTHORIZED", "message": "not authorized"}
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -39,6 +41,22 @@ def get_current_recruiter(
     recruiter = db.get(Recruiter, recruiter_id)
     if recruiter is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_NOT_AUTHENTICATED)
+    # A suspended recruiter (TS-14 admin revoke) still has a valid session
+    # cookie/row — only this check actually locks them out.
+    if recruiter.account_state == RecruiterState.SUSPENDED:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=_NOT_AUTHENTICATED)
+    return recruiter
+
+
+def get_current_admin(
+    recruiter: Recruiter = Depends(get_current_recruiter),
+) -> Recruiter:
+    """Single hardcoded admin identity (TS-14) — still requires a real
+    Google-authenticated session via get_current_recruiter, just gates which
+    authenticated recruiter may reach /admin/*. Blank ADMIN_EMAIL disables
+    the admin dashboard entirely, since no recruiter email ever matches ""."""
+    if not settings.admin_email or recruiter.email != settings.admin_email:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=_NOT_AUTHORIZED)
     return recruiter
 
 
