@@ -1,6 +1,12 @@
 import { FlatList, Linking, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Card, EmptyState, ScreenLoading } from "../../components/ui";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  IconBubble,
+  ScreenLoading,
+} from "../../components/ui";
 import { apiErrorMessage } from "../../lib/http";
 import {
   SLOT_STATUS_COLORS,
@@ -53,7 +59,11 @@ export default function Scheduling() {
         }
         renderItem={({ item }: { item: InterviewSlot }) => (
           <Card>
-            <View className="flex-row items-start justify-between gap-2">
+            <View className="flex-row items-start gap-3">
+              <IconBubble
+                name="calendar-outline"
+                tone={SLOT_STATUS_COLORS[item.status]}
+              />
               <View className="flex-1">
                 <Text className="text-card font-semibold text-ink">
                   {item.candidate_name}
@@ -70,7 +80,7 @@ export default function Scheduling() {
             </View>
             {item.google_meet_link ? (
               <Text
-                className="mt-2 text-helper font-semibold text-primary"
+                className="mt-3 text-helper font-semibold text-primary"
                 onPress={() => Linking.openURL(item.google_meet_link!)}
               >
                 Join Google Meet

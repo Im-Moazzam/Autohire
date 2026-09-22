@@ -22,6 +22,14 @@ export const SLOT_STATUS_COLORS: Record<SlotStatus, string> = {
   CANCELLED: "muted",
 };
 
+export const SLOT_STATUS_DESCRIPTIONS: Record<SlotStatus, string> = {
+  PENDING: "Invite sent, waiting on the candidate to respond.",
+  CONFIRMED: "Candidate confirmed this time slot.",
+  DECLINED: "Candidate declined this time slot.",
+  RESCHEDULED: "Candidate asked to reschedule.",
+  CANCELLED: "This interview was cancelled.",
+};
+
 /** Confirming/cancelling a slot from the recruiter side is a deliberate
  * backend stub (PATCH /interviews/{id} always 501s — "Phase 2, not
  * implemented", backend/app/api/routes/interviews.py) — mobile is

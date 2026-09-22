@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
+  Avatar,
   Badge,
   EmptyState,
   PressableCard,
@@ -62,13 +63,16 @@ export default function CandidatesList() {
               router.push(`/jobs/${jobId}/candidates/${item.candidate_id}`)
             }
           >
-            <View className="flex-row items-start justify-between gap-2">
+            <View className="flex-row items-center gap-3">
+              <Avatar name={item.full_name} size={36} />
               <View className="flex-1">
                 <Text className="text-card font-semibold text-ink">
                   {item.full_name}
                 </Text>
                 <Text className="text-helper text-muted">{item.email}</Text>
               </View>
+            </View>
+            <View className="mt-2 items-start">
               <Badge
                 label={SUBMISSION_STATUS_LABELS[item.submission_status]}
                 tone={SUBMISSION_STATUS_COLORS[item.submission_status]}

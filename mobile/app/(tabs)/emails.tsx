@@ -1,6 +1,12 @@
 import { FlatList, RefreshControl, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Badge, Card, EmptyState, ScreenLoading } from "../../components/ui";
+import {
+  Badge,
+  Card,
+  EmptyState,
+  IconBubble,
+  ScreenLoading,
+} from "../../components/ui";
 import {
   DELIVERY_STATUS_COLORS,
   DELIVERY_STATUS_LABELS,
@@ -54,7 +60,11 @@ export default function Emails() {
         }
         renderItem={({ item }: { item: EmailLog }) => (
           <Card>
-            <View className="flex-row items-start justify-between gap-2">
+            <View className="flex-row items-start gap-3">
+              <IconBubble
+                name="mail-outline"
+                tone={DELIVERY_STATUS_COLORS[item.delivery_status]}
+              />
               <View className="flex-1">
                 <Text
                   className="text-card font-semibold text-ink"

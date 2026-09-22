@@ -21,6 +21,13 @@ export const JOB_STATUS_COLORS: Record<JobStatus, string> = {
   PROCESSED: "primary",
 };
 
+export const JOB_STATUS_DESCRIPTIONS: Record<JobStatus, string> = {
+  DRAFT: "Not published yet — only visible to you.",
+  LIVE: "Accepting applications from candidates.",
+  CLOSED: "No longer accepting applications.",
+  PROCESSED: "Applications reviewed and ranked.",
+};
+
 export function useJobs() {
   return useQuery<JobPage>({
     queryKey: ["jobs"],

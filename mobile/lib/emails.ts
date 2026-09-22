@@ -28,6 +28,12 @@ export const DELIVERY_STATUS_COLORS: Record<DeliveryStatus, string> = {
   PENDING: "warning",
 };
 
+export const DELIVERY_STATUS_DESCRIPTIONS: Record<DeliveryStatus, string> = {
+  SENT: "Delivered to the candidate's inbox.",
+  FAILED: "Delivery failed — check the address or retry.",
+  PENDING: "Still in the outbound queue.",
+};
+
 export function useEmails() {
   return useQuery<EmailPage>({
     queryKey: ["emails"],
