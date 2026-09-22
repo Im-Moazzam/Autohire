@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
@@ -32,6 +32,15 @@ export default function Login() {
     );
   }
 
+  // Object identity, not just the uri value, matters here: WebView treats a
+  // new `source` object as a navigation request. googleLoginUrl is a stable
+  // module constant, but `{ uri: googleLoginUrl }` is a fresh object every
+  // render — an unrelated re-render while this screen is mounted (e.g. a
+  // query invalidation) was silently reloading the page and restarting the
+  // OAuth flow mid-redirect, invalidating the state cookie the first
+  // attempt had already set.
+  const webviewSource = useMemo(() => ({ uri: googleLoginUrl }), []);
+
   function handleNavigation(nav: WebViewNavigation) {
     if (nav.url.includes("/auth/error")) {
       setPhase("error");
@@ -51,7 +60,7 @@ export default function Login() {
     return (
       <SafeAreaView className="flex-1 bg-canvas" edges={["top"]}>
         <WebView
-          source={{ uri: googleLoginUrl }}
+          source={webviewSource}
           onNavigationStateChange={handleNavigation}
           startInLoadingState
         />
