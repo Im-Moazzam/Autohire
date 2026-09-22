@@ -300,7 +300,7 @@ export function Scheduling() {
                     href={row.google_meet_link}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                    className="inline-flex items-center gap-1 text-primary transition-colors hover:underline"
                   >
                     <VideoIcon className="h-4 w-4" />
                     Join

@@ -23,14 +23,18 @@ export function Header() {
             {initials(recruiter.name)}
           </span>
           <div className="flex flex-col">
-            <span className="text-body font-medium leading-tight">{recruiter.name}</span>
-            <span className="text-helper text-muted leading-tight">{recruiter.email}</span>
+            <span className="text-body font-medium leading-tight">
+              {recruiter.name}
+            </span>
+            <span className="text-helper text-muted leading-tight">
+              {recruiter.email}
+            </span>
           </div>
           <button
             type="button"
             onClick={handleLogout}
             disabled={logout.isPending}
-            className="ml-2 text-body text-muted hover:text-ink disabled:opacity-50"
+            className="ml-2 text-body text-muted transition-colors hover:text-ink disabled:opacity-50"
           >
             {logout.isPending ? "Signing out…" : "Sign out"}
           </button>

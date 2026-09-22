@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from "react-router-dom";
 import { googleReconnectUrl, useCurrentRecruiter } from "../../lib/auth";
+import { buttonClassName } from "../ui/Button";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
@@ -34,7 +35,7 @@ export function AppShell() {
         <button
           type="button"
           onClick={() => refetch()}
-          className="rounded-control bg-primary px-5 py-3 text-body font-semibold text-white"
+          className={buttonClassName()}
         >
           Retry
         </button>
