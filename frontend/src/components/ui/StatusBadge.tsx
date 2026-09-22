@@ -77,7 +77,7 @@ export function StatusBadge({ status }: StatusBadgeProps) {
   return (
     <span
       className={[
-        "inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-helper font-semibold",
+        "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 py-1 text-helper font-semibold",
         toneClasses[tone],
       ].join(" ")}
     >

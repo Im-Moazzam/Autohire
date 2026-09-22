@@ -78,10 +78,29 @@ function ResumeLink({ url }: { url: string | null | undefined }) {
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="inline-flex items-center gap-1 text-primary hover:underline"
+      className="inline-flex items-center gap-1 text-primary transition-colors hover:underline"
     >
       <FileTextIcon className="h-4 w-4" />
       Resume
+    </a>
+  );
+}
+
+/** Same resume link, as an icon-only button — for tight header layouts
+ * (RankedCard) where a text link crowds the rank/name/badge row. */
+function ResumeIconLink({ url }: { url: string | null | undefined }) {
+  const href = resumeHref(url);
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title="View resume"
+      aria-label="View resume"
+      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-primary transition-colors hover:bg-primary-soft"
+    >
+      <FileTextIcon className="h-4 w-4" />
     </a>
   );
 }
@@ -147,8 +166,14 @@ function StatusActions({
 
   const isUndo = current === "REJECTED";
 
+  // No wrapping div here — the caller's own flex row (alongside
+  // ScheduleInterviewButton, in both CandidateDetailModal and RankedCard)
+  // already provides gap-3. A second nested flex wrapper made these buttons
+  // NOT direct siblings of ScheduleInterviewButton, so only it (the sole
+  // direct flex-1 item) stretched to fill the row while these collapsed to
+  // their own cramped inner width instead of sharing space evenly.
   return (
-    <div className="flex gap-3">
+    <>
       {options.map((status) => (
         <button
           key={status}
@@ -175,7 +200,7 @@ function StatusActions({
           {statusActionLabel(status, current)}
         </button>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -421,37 +446,42 @@ function RankedCard({
           onOpen(candidate.candidate_id);
         }
       }}
-      className="flex cursor-pointer flex-col gap-3 rounded-card border border-border bg-surface p-5 animate-slide-up transition-shadow hover:shadow-card"
+      className="flex h-full cursor-pointer flex-col gap-4 rounded-card border border-border bg-surface p-5 animate-slide-up transition-shadow hover:shadow-card"
     >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3">
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ai/10 text-helper font-semibold text-ai">
             #{candidate.rank_position}
           </span>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-card font-semibold">{candidate.full_name}</h3>
+            <h3 className="text-card font-semibold leading-tight">
+              {candidate.full_name}
+            </h3>
+            <div className="mt-1 text-helper text-muted">{candidate.email}</div>
+            <div className="mt-2">
               <StatusBadge
                 status={SUBMISSION_STATUS_LABELS[candidate.submission_status]}
               />
             </div>
-            <div className="text-helper text-muted">{candidate.email}</div>
           </div>
         </div>
         <span onClick={(e) => e.stopPropagation()}>
-          <ResumeLink url={candidate.resume_url} />
+          <ResumeIconLink url={candidate.resume_url} />
         </span>
       </div>
 
-      <MatchScore score={candidate.semantic_score} />
-
-      {candidate.ai_feedback_summary && (
-        <p className="text-body text-muted">{candidate.ai_feedback_summary}</p>
-      )}
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <MatchScore score={candidate.semantic_score} className="w-full" />
+        {candidate.ai_feedback_summary && (
+          <p className="text-body text-muted">
+            {candidate.ai_feedback_summary}
+          </p>
+        )}
+      </div>
 
       {(candidate.matched_skills.length > 0 ||
         candidate.missing_skills.length > 0) && (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 border-t border-border pt-4">
           {candidate.matched_skills.map((s) => (
             <span
               key={s}
@@ -471,7 +501,10 @@ function RankedCard({
         </div>
       )}
 
-      <div onClick={(e) => e.stopPropagation()} className="flex gap-3">
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="mt-auto flex flex-col gap-2 border-t border-border pt-4"
+      >
         {candidate.submission_status === "RANKED" && (
           <ScheduleInterviewButton
             candidateId={candidate.candidate_id}
@@ -604,7 +637,7 @@ export function Candidates() {
     <div className="flex flex-col gap-6">
       <Link
         to="/jobs"
-        className="inline-flex items-center gap-1 text-body text-muted hover:text-ink w-fit"
+        className="inline-flex items-center gap-1 text-body text-muted transition-colors hover:text-ink w-fit"
       >
         <ArrowLeftIcon className="h-4 w-4" />
         Back to jobs
@@ -789,7 +822,7 @@ export function Candidates() {
           icon={<SparklesIcon />}
         />
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {ranked.data!.items.map((c) => (
             <RankedCard
               key={c.candidate_id}
