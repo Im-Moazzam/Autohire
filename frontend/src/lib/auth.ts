@@ -33,3 +33,13 @@ export function useLogout() {
     onSuccess: () => queryClient.setQueryData(["auth", "me"], null),
   });
 }
+
+export function useUpdateRecruiter() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (full_name: string) =>
+      api.patch<Recruiter>("/recruiters/me", { full_name }),
+    onSuccess: (recruiter) =>
+      queryClient.setQueryData(["auth", "me"], recruiter),
+  });
+}

@@ -54,24 +54,6 @@ function BriefcaseIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function UsersIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
 function CalendarIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -123,22 +105,6 @@ function GearIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-function ActivityIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      {...props}
-    >
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
-  );
-}
-
 interface NavItem {
   label: string;
   to?: string;
@@ -149,18 +115,21 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: GridIcon },
   { label: "Templates", to: "/templates", icon: FileTextIcon },
   { label: "Jobs", to: "/jobs", icon: BriefcaseIcon },
-  { label: "Candidates", icon: UsersIcon },
   { label: "Scheduling", to: "/scheduling", icon: CalendarIcon },
   { label: "Emails", to: "/emails", icon: MailIcon },
-  { label: "Settings", icon: GearIcon },
-  { label: "Admin Monitoring", icon: ActivityIcon },
+  { label: "Settings", to: "/settings", icon: GearIcon },
 ];
 
 export function Sidebar() {
   return (
     <aside className="flex h-screen w-[260px] shrink-0 flex-col border-r border-border bg-surface p-4">
       <div className="flex items-center gap-2 px-2 pb-4">
-        <svg viewBox="0 0 24 24" className="h-6 w-6 text-primary" fill="none" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          className="h-6 w-6 text-primary"
+          fill="none"
+          aria-hidden="true"
+        >
           <path
             d="M4 17 12 6 20 17"
             stroke="currentColor"

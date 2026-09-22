@@ -12,6 +12,7 @@ import { JobBuilder } from "./pages/JobBuilder";
 import { Candidates } from "./pages/Candidates";
 import { Scheduling } from "./pages/Scheduling";
 import { Emails } from "./pages/Emails";
+import { Settings } from "./pages/Settings";
 
 const devRoutes = import.meta.env.DEV
   ? [
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "/jobs/:jobId/candidates", element: <Candidates /> },
       { path: "/scheduling", element: <Scheduling /> },
       { path: "/emails", element: <Emails /> },
+      { path: "/settings", element: <Settings /> },
     ],
   },
   {
