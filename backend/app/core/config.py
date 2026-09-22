@@ -45,6 +45,11 @@ class Settings(BaseSettings):
 
     max_resume_mb: int = 5
 
+    # Single hardcoded admin identity (TS-14) — no separate password, no
+    # is_admin DB column. Still requires a real Google-authenticated session;
+    # this just gates which authenticated recruiter may reach /admin/*.
+    admin_email: str = ""
+
     # Where LocalResumeStore writes resume folders (RESUME_STORE=local).
     # Defaults to the docker-compose mount; not every process runs in that
     # container (CI, a host .venv), so this must be overridable rather than
