@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- Admin dashboard (TS-14), hidden `/admin` route (not in Sidebar's nav list,
+  reachable only by URL): cross-recruiter usage totals, account health, a
+  background-task log filterable by status/type, and suspend/reactivate for
+  a recruiter's access. Gated by a single hardcoded `ADMIN_EMAIL` env var via
+  a new `get_current_admin` dependency, built on top of the normal
+  `get_current_recruiter` (still requires a real Google session — no
+  separate password). No migration — `RecruiterState.SUSPENDED` already
+  existed, unused, with a `ponytail:` comment in `auth_service.py` marking
+  this exact gap since US-01/US-02.
 - Recruiter Settings page (TS-13) at `/settings`: edit name, sign out, Google
   connection status with reconnect, and a link to Scheduling's interview
   availability. No backend changes — every piece of data and mutation it uses
@@ -70,6 +79,13 @@
   `docs/stories/TS-12.md`.
 
 ### Fixed
+- `get_current_recruiter` never checked `account_state` at all — a
+  `SUSPENDED` recruiter's existing session cookie kept working on every
+  route. Now rejected with 401, same as an unauthenticated request (TS-14).
+- `upsert_recruiter`'s login path unconditionally overwrote `account_state`
+  on every login, silently flipping a `SUSPENDED` recruiter back to `ACTIVE`
+  the next time they signed in — a known gap flagged by a `ponytail:`
+  comment since US-01/US-02, now fixed and regression-tested (TS-14).
 - `StatusActions` (Schedule interview / Reject / Undo, in the candidate
   profile modal and ranked-candidate cards) double-wrapped its buttons in a
   nested flex container, so only the sibling Schedule button (the sole direct

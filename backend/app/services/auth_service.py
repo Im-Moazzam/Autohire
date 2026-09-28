@@ -90,9 +90,14 @@ def upsert_recruiter(db: Session, tokens: GoogleTokens, userinfo: GoogleUserInfo
             recruiter.google_refresh_token = encrypt_token(tokens.refresh_token)
         recruiter.google_token_expires_at = expires_at
         recruiter.granted_scopes = tokens.granted_scopes
-        # ponytail: overwrites SUSPENDED on login since no admin flow exists yet
-        # to set it; revisit once the admin suspend story lands.
-        recruiter.account_state = account_state
+        # A suspended recruiter can still complete Google's OAuth dance (it
+        # knows nothing about AutoHire's own state) — but a login here must
+        # never resurrect them out of SUSPENDED. get_current_recruiter (TS-14)
+        # rejects SUSPENDED on every request regardless, so the session
+        # cookie issued after this is inert either way; this just keeps the
+        # DB row itself from silently flipping back to ACTIVE.
+        if recruiter.account_state != RecruiterState.SUSPENDED:
+            recruiter.account_state = account_state
         recruiter.last_login_at = now
 
     db.commit()
