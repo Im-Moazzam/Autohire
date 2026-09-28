@@ -64,6 +64,19 @@
   already-ranked job stays a cheap re-rank (parsing is a no-op for
   already-`PARSED` candidates) rather than being wrongly blocked. See
   `docs/drift.md` row 72.
+- Frontend UI/UX consistency pass (TS-12), same design tokens throughout: icon
+  set consolidated into `components/ui/icons.tsx` (was duplicated across
+  `Sidebar.tsx`/`Home.tsx`, several byte-for-byte); AutoHire logo mark
+  extracted into a shared `components/app/Logo.tsx` (was inlined 3 times); a
+  global `cursor: pointer` rule for every `<button>` and `transition-colors`
+  on every text hover link, both previously inconsistent across 7+ files;
+  `TemplateBuilder`'s field-reorder controls use icons instead of raw `↑`/`↓`
+  text and the "Required" checkbox is styled; Dashboard KPI/donut cards now
+  stretch to equal height within their grid row; ranked-candidates list moved
+  to a responsive 2-column grid with a reworked `RankedCard` (status badge on
+  its own line, icon resume link, full-width `MatchScore`, visual section
+  dividers, actions pinned to the card bottom). Full detail in
+  `docs/stories/TS-12.md`.
 
 ### Fixed
 - `get_current_recruiter` never checked `account_state` at all — a
@@ -73,6 +86,15 @@
   on every login, silently flipping a `SUSPENDED` recruiter back to `ACTIVE`
   the next time they signed in — a known gap flagged by a `ponytail:`
   comment since US-01/US-02, now fixed and regression-tested (TS-14).
+- `StatusActions` (Schedule interview / Reject / Undo, in the candidate
+  profile modal and ranked-candidate cards) double-wrapped its buttons in a
+  nested flex container, so only the sibling Schedule button (the sole direct
+  flex-1 item in the row) stretched to fill the available width while
+  Reject/Undo collapsed to a cramped inner width instead of sharing the row
+  evenly.
+- `DataTable` rows showed a hover highlight even on tables with no
+  `onRowClick` (Emails, Templates, Scheduling) — a misleading affordance,
+  since nothing happened on click.
 - Scheduling an interview from the candidate profile could leave the
   "Scheduling…" spinner and its loading toast stuck forever even though the
   backend had already finished — `ScheduleInterviewButton` re-implemented

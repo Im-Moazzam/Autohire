@@ -47,7 +47,7 @@ function JobDescription({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-body text-primary hover:underline"
+          className="mt-1 text-body text-primary transition-colors hover:underline"
         >
           {expanded ? "Show less" : "Show more"}
         </button>

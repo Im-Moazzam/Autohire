@@ -67,7 +67,7 @@ export function JobBuilder() {
         />
         <Link
           to="/jobs"
-          className="mt-4 inline-block text-body text-primary hover:underline"
+          className="mt-4 inline-block text-body text-primary transition-colors hover:underline"
         >
           Back to jobs
         </Link>
@@ -258,7 +258,10 @@ export function JobBuilder() {
         <h1 className="text-page font-semibold">
           {isEditing ? "Edit job" : "Create new job"}
         </h1>
-        <Link to="/jobs" className="text-body text-muted hover:text-ink">
+        <Link
+          to="/jobs"
+          className="text-body text-muted transition-colors hover:text-ink"
+        >
           Cancel
         </Link>
       </div>
@@ -271,7 +274,7 @@ export function JobBuilder() {
           <button
             type="button"
             onClick={handleCopyLink}
-            className="shrink-0 text-body text-primary hover:underline"
+            className="shrink-0 text-body text-primary transition-colors hover:underline"
           >
             Copy link
           </button>
@@ -337,7 +340,7 @@ export function JobBuilder() {
           {retryJobId && (
             <Link
               to={`/jobs/${retryJobId}/edit`}
-              className="text-primary hover:underline"
+              className="text-primary transition-colors hover:underline"
             >
               Go to the job and retry
             </Link>
@@ -351,7 +354,7 @@ export function JobBuilder() {
             type="button"
             onClick={handleClose}
             disabled={updateJob.isPending}
-            className="text-body text-error hover:underline disabled:opacity-50"
+            className="text-body text-error transition-colors hover:underline disabled:opacity-50"
           >
             Close job
           </button>
@@ -360,7 +363,7 @@ export function JobBuilder() {
             type="button"
             onClick={handleRetryLaunch}
             disabled={updateJob.isPending}
-            className="text-body text-primary hover:underline disabled:opacity-50"
+            className="text-body text-primary transition-colors hover:underline disabled:opacity-50"
           >
             {updateJob.isPending ? "Retrying…" : "Retry launch"}
           </button>
@@ -369,7 +372,7 @@ export function JobBuilder() {
             type="button"
             onClick={handleReopen}
             disabled={updateJob.isPending}
-            className="text-body text-primary hover:underline disabled:opacity-50"
+            className="text-body text-primary transition-colors hover:underline disabled:opacity-50"
           >
             {updateJob.isPending ? "Reopening…" : "Reopen job"}
           </button>
