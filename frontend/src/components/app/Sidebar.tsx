@@ -2,14 +2,12 @@ import type { ReactNode, SVGProps } from "react";
 import { NavLink } from "react-router-dom";
 import { Logo } from "./Logo";
 import {
-  ActivityIcon,
   BriefcaseIcon,
   CalendarIcon,
   FileTextIcon,
   GearIcon,
   GridIcon,
   MailIcon,
-  UsersIcon,
 } from "../ui/icons";
 
 interface NavItem {
@@ -22,11 +20,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", to: "/dashboard", icon: GridIcon },
   { label: "Templates", to: "/templates", icon: FileTextIcon },
   { label: "Jobs", to: "/jobs", icon: BriefcaseIcon },
-  { label: "Candidates", icon: UsersIcon },
   { label: "Scheduling", to: "/scheduling", icon: CalendarIcon },
   { label: "Emails", to: "/emails", icon: MailIcon },
-  { label: "Settings", icon: GearIcon },
-  { label: "Admin Monitoring", icon: ActivityIcon },
+  { label: "Settings", to: "/settings", icon: GearIcon },
 ];
 
 export function Sidebar() {
