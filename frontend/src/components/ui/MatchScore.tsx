@@ -34,16 +34,19 @@ export interface MatchScoreProps {
   isLoading?: boolean;
   /** Ranking failed for this candidate (e.g. PARSE_ERROR) — score never landed. */
   errorText?: string;
+  /** Defaults to a fixed 160px — pass e.g. "w-full" to fill a wider container. */
+  className?: string;
 }
 
 export function MatchScore({
   score,
   isLoading = false,
   errorText,
+  className = "w-40",
 }: MatchScoreProps) {
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 w-40" aria-busy="true">
+      <div className={`flex items-center gap-2 ${className}`} aria-busy="true">
         <div className="h-2 flex-1 rounded-sm bg-border animate-pulse" />
         <span className="text-helper text-muted">…</span>
       </div>
@@ -52,7 +55,7 @@ export function MatchScore({
 
   if (errorText || score === undefined) {
     return (
-      <div className="flex items-center gap-2 w-40">
+      <div className={`flex items-center gap-2 ${className}`}>
         <div className="h-2 flex-1 rounded-sm bg-border" />
         <span className="text-helper text-muted">
           {errorText ?? "Unavailable"}
@@ -65,7 +68,7 @@ export function MatchScore({
 
   return (
     <div
-      className="flex items-center gap-2 w-40"
+      className={`flex items-center gap-2 ${className}`}
       role="meter"
       aria-valuenow={Math.round(score * 100)}
       aria-valuemin={0}

@@ -113,8 +113,8 @@ export function DataTable<T>({
                         : undefined
                     }
                     className={[
-                      "border-b border-border last:border-0 hover:bg-primary-soft",
-                      onRowClick ? "cursor-pointer" : "",
+                      "border-b border-border last:border-0 transition-colors",
+                      onRowClick ? "cursor-pointer hover:bg-primary-soft" : "",
                     ].join(" ")}
                   >
                     {columns.map((col, i) => (
