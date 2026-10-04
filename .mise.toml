@@ -26,6 +26,14 @@ run = "docker compose restart api"
 description = "Tail api + worker logs"
 run = "docker compose logs -f api worker"
 
+[tasks."mobile:tunnel"]
+description = "Start the ngrok tunnel to the API for real Google sign-in on a phone. Requires the one-time ngrok setup in mobile/README.md and EXPO_PUBLIC_API_ORIGIN set in mobile/.env. Leave running in its own terminal."
+run = "domain=$(grep EXPO_PUBLIC_API_ORIGIN mobile/.env | cut -d= -f2 | sed 's#https://##'); docker run --rm --name ngrok-tunnel --network autohire_default -v ngrok-config:/var/lib/ngrok ngrok/ngrok http api:8000 --url=https://$domain"
+
+[tasks."mobile:start"]
+description = "Start the Expo dev server for the mobile app in LAN mode. Scan the QR code with Expo Go."
+run = "cd mobile && npx expo start --host lan"
+
 [tasks."db:migrate"]
 description = "Apply Alembic migrations"
 run = "docker compose exec api alembic upgrade head"
