@@ -31,6 +31,12 @@
   `make api-client` now regenerates the mobile client alongside the web one.
 
 ### Changed
+- Ranked candidate cards no longer show the one-line AI feedback sentence
+  (e.g. "Strong match; light on infra experience.") — just the match score
+  and the matched/missing skill chips.
+- "Rank candidates" now only appears on the "All submissions" tab, not on
+  "AI ranked" — it's a re-trigger action, not something you need while
+  looking at results you already have.
 - Removed "Candidates" and "Admin Monitoring" from the sidebar (TS-13) — both
   were permanently disabled placeholders with no route. Candidates has no
   standalone screen (always viewed per-job); Admin Monitoring is being

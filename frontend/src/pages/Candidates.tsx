@@ -472,11 +472,6 @@ function RankedCard({
 
       <div className="flex flex-col gap-2 border-t border-border pt-4">
         <MatchScore score={candidate.semantic_score} className="w-full" />
-        {candidate.ai_feedback_summary && (
-          <p className="text-body text-muted">
-            {candidate.ai_feedback_summary}
-          </p>
-        )}
       </div>
 
       {(candidate.matched_skills.length > 0 ||
@@ -657,43 +652,46 @@ export function Candidates() {
             Review submissions and AI-ranked candidates for this job.
           </p>
         </div>
-        {process.allowed ? (
-          <button
-            type="button"
-            onClick={handleStartRanking}
-            disabled={isPipelineRunning}
-            className={buttonClassName({
-              variant: "primary",
-              className: "gap-2 disabled:opacity-40",
-            })}
-          >
-            {isPipelineRunning ? (
-              <span
-                className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
-                aria-hidden="true"
-              />
-            ) : (
-              <SparklesIcon className="h-4 w-4" />
-            )}
-            {isProcessing
-              ? "Parsing resumes…"
-              : isRanking
-                ? "Ranking…"
-                : isPipelineRunning
-                  ? "Starting…"
-                  : "Rank candidates"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled
-            title={process.reason ?? "Close the job before ranking candidates"}
-            className="flex cursor-not-allowed items-center gap-2 rounded-control bg-warning/10 px-5 py-3 text-body font-semibold text-warning"
-          >
-            <LockIcon className="h-4 w-4" />
-            {process.reason ?? "Can't rank until job is closed"}
-          </button>
-        )}
+        {tab === "all" &&
+          (process.allowed ? (
+            <button
+              type="button"
+              onClick={handleStartRanking}
+              disabled={isPipelineRunning}
+              className={buttonClassName({
+                variant: "primary",
+                className: "gap-2 disabled:opacity-40",
+              })}
+            >
+              {isPipelineRunning ? (
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+                  aria-hidden="true"
+                />
+              ) : (
+                <SparklesIcon className="h-4 w-4" />
+              )}
+              {isProcessing
+                ? "Parsing resumes…"
+                : isRanking
+                  ? "Ranking…"
+                  : isPipelineRunning
+                    ? "Starting…"
+                    : "Rank candidates"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              title={
+                process.reason ?? "Close the job before ranking candidates"
+              }
+              className="flex cursor-not-allowed items-center gap-2 rounded-control bg-warning/10 px-5 py-3 text-body font-semibold text-warning"
+            >
+              <LockIcon className="h-4 w-4" />
+              {process.reason ?? "Can't rank until job is closed"}
+            </button>
+          ))}
       </div>
 
       <div className="flex gap-1 rounded-control bg-border/30 p-1 w-fit">
