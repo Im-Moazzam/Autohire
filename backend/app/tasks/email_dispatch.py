@@ -36,11 +36,17 @@ from app.models.interview import InterviewSlot
 from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.schemas.enums import DeliveryStatus, EmailType
-from app.services.email_service import render_invite
+from app.services.email_service import render_cancellation, render_invite, render_reschedule
 from app.services.interview_service import get_preferences_row
 from app.worker import celery_app
 
 _RETRYABLE = (OperationalError,)
+
+_RENDERERS = {
+    EmailType.INTERVIEW_INVITE: render_invite,
+    EmailType.INTERVIEW_RESCHEDULE: render_reschedule,
+    EmailType.CANCELLATION: render_cancellation,
+}
 
 
 @celery_app.task(
@@ -51,12 +57,14 @@ _RETRYABLE = (OperationalError,)
     retry_backoff=True,
     autoretry_for=_RETRYABLE,
 )
-def email_dispatch_job(self: Task, slot_id: str) -> None:
+def email_dispatch_job(
+    self: Task, slot_id: str, email_type: str = EmailType.INTERVIEW_INVITE.value
+) -> None:
     with SessionLocal() as db:
-        _run_email_dispatch(db, uuid.UUID(slot_id))
+        _run_email_dispatch(db, uuid.UUID(slot_id), EmailType(email_type))
 
 
-def _run_email_dispatch(db: Session, slot_id: uuid.UUID) -> None:
+def _run_email_dispatch(db: Session, slot_id: uuid.UUID, email_type: EmailType) -> None:
     slot = db.get(InterviewSlot, slot_id)
     if slot is None:
         return
@@ -69,14 +77,14 @@ def _run_email_dispatch(db: Session, slot_id: uuid.UUID) -> None:
 
     pref = get_preferences_row(db, slot.recruiter_id)
     timezone = pref.timezone if pref is not None else "UTC"
-    subject, body = render_invite(candidate, job, slot, timezone)
+    subject, body = _RENDERERS[email_type](candidate, job, slot, timezone)
 
-    idempotency_key = f"{slot.candidate_id}:{EmailType.INTERVIEW_INVITE.value}:{slot.slot_id}"
+    idempotency_key = f"{slot.candidate_id}:{email_type.value}:{slot.slot_id}"
     log = EmailLog(
         recruiter_id=slot.recruiter_id,
         candidate_id=slot.candidate_id,
         slot_id=slot.slot_id,
-        email_type=EmailType.INTERVIEW_INVITE,
+        email_type=email_type,
         subject=subject,
         body_preview=body[:500],
         idempotency_key=idempotency_key,

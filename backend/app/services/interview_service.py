@@ -1,3 +1,4 @@
+import contextlib
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
@@ -8,13 +9,15 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.adapters.calendar_store import get_calendar_store
 from app.models.background_task import BackgroundTask
 from app.models.candidate import Candidate
 from app.models.interview import InterviewSlot
+from app.models.job import JobPosting
 from app.models.recruiter import Recruiter
 from app.models.scheduling import SchedulingPreference
 from app.schemas.common import PaginationParams
-from app.schemas.enums import SlotStatus, SubmissionStatus, TaskStatus, TaskType
+from app.schemas.enums import EmailType, SlotStatus, SubmissionStatus, TaskStatus, TaskType
 from app.services.task_service import active_task_for_job
 
 HORIZON_DAYS = 14
@@ -33,6 +36,29 @@ _PROCESSING_IN_PROGRESS = {
     "code": "PROCESSING_IN_PROGRESS",
     "message": "A processing task for this job is already running.",
 }
+_SLOT_NOT_FOUND = {"code": "SLOT_NOT_FOUND", "message": "Interview slot not found."}
+_INVALID_STATE_TRANSITION = {
+    "code": "INVALID_STATE_TRANSITION",
+    "message": "This interview can no longer be cancelled.",
+}
+
+# Only a live slot can be cancelled; CANCELLED/DECLINED/RESCHEDULED are
+# already terminal for this action (US-28).
+_LEGAL_SLOT_TRANSITIONS: dict[SlotStatus, set[SlotStatus]] = {
+    SlotStatus.PENDING: {SlotStatus.CANCELLED},
+    SlotStatus.CONFIRMED: {SlotStatus.CANCELLED},
+    SlotStatus.DECLINED: set(),
+    SlotStatus.RESCHEDULED: set(),
+    SlotStatus.CANCELLED: set(),
+}
+
+
+def is_legal_slot_transition(current: SlotStatus, target: SlotStatus) -> bool:
+    """Unlike job_service's transition check, current == target is NOT an
+    automatic pass here: re-cancelling an already-CANCELLED slot must 409,
+    not silently re-run the rebook/email side effects a second time."""
+    return target in _LEGAL_SLOT_TRANSITIONS[current]
+
 
 _WEEKDAY_INDEX = {
     "MONDAY": 0,
@@ -227,3 +253,103 @@ def available_slots_for_recruiter(
     starts = generate_slots(pref, occupied, count, now)
     duration = timedelta(minutes=pref.slot_duration_minutes)
     return [(start, start + duration) for start in starts]
+
+
+def cancel_slot(
+    db: Session, recruiter: Recruiter, slot_id: uuid.UUID, reschedule_reason: str | None
+) -> InterviewSlot:
+    """PATCH /interviews/{slot_id} with status=CANCELLED (US-28). Cancels the
+    slot, deletes its Calendar event, then tries to auto-book the candidate's
+    next available slot — same generate_slots/occupied_intervals path
+    calendar_sync_job uses. No replacement found in the horizon: the slot
+    stays CANCELLED with no new row, and the candidate gets a
+    cancellation-only email instead of a reschedule one.
+
+    Returns the replacement slot if one was created, otherwise the cancelled
+    slot itself — either way, the row the recruiter should see as "what
+    happened to this interview."
+    """
+    from app.tasks.email_dispatch import email_dispatch_job  # avoids a service<->task cycle
+
+    slot = db.get(InterviewSlot, slot_id)
+    if slot is None or slot.recruiter_id != recruiter.recruiter_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_SLOT_NOT_FOUND)
+    if not is_legal_slot_transition(slot.status, SlotStatus.CANCELLED):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=_INVALID_STATE_TRANSITION)
+
+    old_event_id = slot.google_calendar_event_id
+    slot.status = SlotStatus.CANCELLED
+    if reschedule_reason is not None:
+        slot.reschedule_reason = reschedule_reason
+    db.commit()
+    db.refresh(slot)
+
+    if old_event_id:
+        # Cancellation already committed; a stale Calendar event is a
+        # cosmetic loose end, never a reason to fail this request.
+        with contextlib.suppress(Exception):
+            get_calendar_store().delete_event(recruiter, old_event_id)
+
+    new_slot = _try_rebook(db, recruiter, slot)
+    if new_slot is not None:
+        email_dispatch_job.delay(str(new_slot.slot_id), EmailType.INTERVIEW_RESCHEDULE.value)
+        return new_slot
+
+    email_dispatch_job.delay(str(slot.slot_id), EmailType.CANCELLATION.value)
+    return slot
+
+
+def _try_rebook(
+    db: Session, recruiter: Recruiter, cancelled_slot: InterviewSlot
+) -> InterviewSlot | None:
+    pref = get_preferences_row(db, recruiter.recruiter_id)
+    if pref is None:
+        return None
+
+    now = datetime.now(UTC)
+    horizon_end = now + timedelta(days=HORIZON_DAYS)
+    occupied = occupied_intervals(db, recruiter.recruiter_id, now, horizon_end)
+    times = generate_slots(pref, occupied, count=1, now=now)
+    if not times:
+        return None
+
+    new_slot = InterviewSlot(
+        candidate_id=cancelled_slot.candidate_id,
+        job_id=cancelled_slot.job_id,
+        recruiter_id=recruiter.recruiter_id,
+        scheduled_at=times[0],
+        duration_minutes=pref.slot_duration_minutes,
+        status=SlotStatus.PENDING,
+    )
+    db.add(new_slot)
+    try:
+        db.commit()
+    except IntegrityError:
+        # Lost a race for this time slot — leave the cancellation as-is
+        # rather than retrying inline; the recruiter can re-run from the UI.
+        db.rollback()
+        return None
+    db.refresh(new_slot)
+
+    candidate = db.get(Candidate, new_slot.candidate_id)
+    job = db.get(JobPosting, new_slot.job_id)
+    assert candidate is not None and job is not None  # FKs guarantee this
+
+    try:
+        event = get_calendar_store().create_event(
+            recruiter,
+            summary=f"Interview: {candidate.full_name} — {job.job_title}",
+            description=job.job_description,
+            starts_at=new_slot.scheduled_at,
+            duration_minutes=new_slot.duration_minutes,
+            attendee_email=candidate.email,
+        )
+        new_slot.google_calendar_event_id = event.event_id
+        new_slot.google_meet_link = event.meet_link
+        db.commit()
+    except Exception:
+        # Row stays PENDING without an event id — present and retryable,
+        # same rule as calendar_sync_job.
+        pass
+
+    return new_slot

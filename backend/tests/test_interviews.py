@@ -112,9 +112,47 @@ class _FakeCalendarStore:
     def create_event(self, recruiter, **kwargs):  # noqa: ANN001, ANN003
         return Mock(event_id=f"cal-{uuid.uuid4().hex}", meet_link="https://meet.local.test/fake")
 
+    def delete_event(self, recruiter, event_id):  # noqa: ANN001
+        pass
+
 
 def _patch_calendar_store():
     return patch("app.tasks.calendar_sync.get_calendar_store", return_value=_FakeCalendarStore())
+
+
+def _patch_cancel_calendar_store(**kwargs):  # noqa: ANN003
+    return patch(
+        "app.services.interview_service.get_calendar_store",
+        return_value=Mock(spec=_FakeCalendarStore(), **kwargs),
+    )
+
+
+def _no_op_cancel_email_dispatch():
+    return patch("app.tasks.email_dispatch.email_dispatch_job.delay")
+
+
+def _make_live_slot(
+    db_session: Session,
+    recruiter: Recruiter,
+    candidate: Candidate,
+    job_id: uuid.UUID,
+    *,
+    status: SlotStatus = SlotStatus.PENDING,
+    event_id: str | None = "cal-existing",
+) -> InterviewSlot:
+    slot = InterviewSlot(
+        candidate_id=candidate.candidate_id,
+        job_id=job_id,
+        recruiter_id=recruiter.recruiter_id,
+        scheduled_at=datetime.now(UTC) + timedelta(days=1),
+        duration_minutes=30,
+        status=status,
+        google_calendar_event_id=event_id,
+    )
+    db_session.add(slot)
+    db_session.commit()
+    db_session.refresh(slot)
+    return slot
 
 
 def _no_op_email_dispatch():
@@ -129,25 +167,151 @@ def _run_calendar_sync(
     db_session.expire_all()
 
 
-# TS-06/R-04: PATCH on a REAL slot must not 404 against the stale fixture
-# lookup — Phase 2 (reschedule/cancel) isn't built, so it must say so honestly.
-def test_patch_real_slot_is_501_not_implemented(
+# TS-06/R-04: a status other than CANCELLED is still genuinely Phase 2 —
+# US-28 only implements cancellation, not a direct reschedule/decline.
+def test_patch_non_cancel_status_is_501_not_implemented(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "c@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"])
+
+    response = authed_client.patch(
+        f"/api/v1/interviews/{slot.slot_id}", json={"status": "CONFIRMED"}
+    )
+    assert response.status_code == 501
+    assert response.json()["code"] == "NOT_IMPLEMENTED"
+
+
+# TC-01/TC-02 (US-28): cancelling a live slot with a replacement available
+# auto-books the candidate into the next open slot and emails them about it.
+@pytest.mark.parametrize("original_status", [SlotStatus.PENDING, SlotStatus.CONFIRMED])
+def test_cancel_slot_with_replacement_available(
+    authed_client: TestClient, db_session: Session, original_status: SlotStatus
+) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "cancel-me@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"], status=original_status)
+
+    with _patch_cancel_calendar_store() as store, _no_op_cancel_email_dispatch() as dispatch:
+        store.return_value.create_event.return_value = Mock(
+            event_id="cal-new", meet_link="https://meet.local.test/new"
+        )
+        response = authed_client.patch(
+            f"/api/v1/interviews/{slot.slot_id}",
+            json={"status": "CANCELLED", "reschedule_reason": "double-booked"},
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "PENDING"
+    assert body["slot_id"] != str(slot.slot_id)
+
+    db_session.expire_all()
+    old = db_session.get(InterviewSlot, slot.slot_id)
+    assert old.status == SlotStatus.CANCELLED
+    assert old.reschedule_reason == "double-booked"
+
+    new_slot = db_session.get(InterviewSlot, uuid.UUID(body["slot_id"]))
+    assert new_slot.status == SlotStatus.PENDING
+    assert new_slot.candidate_id == candidate.candidate_id
+    assert new_slot.google_calendar_event_id == "cal-new"
+
+    deleted_recruiter, deleted_event_id = store.return_value.delete_event.call_args.args
+    assert deleted_recruiter.recruiter_id == recruiter.recruiter_id
+    assert deleted_event_id == "cal-existing"
+    dispatch.assert_called_once_with(str(new_slot.slot_id), "INTERVIEW_RESCHEDULE")
+
+
+# TC-03 (US-28): no replacement slot found in the horizon — stays cancelled,
+# candidate gets told the recruiter will follow up, no new row created.
+def test_cancel_slot_without_replacement_sends_cancellation_email(
     authed_client: TestClient, db_session: Session
 ) -> None:
     _set_preferences(authed_client)
     job = _create_job(authed_client)
     recruiter = _get_recruiter(db_session)
-    candidate = _add_candidate(db_session, job["job_id"], "c@example.com")
+    candidate = _add_candidate(db_session, job["job_id"], "no-slot@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"])
 
-    task = _make_task_row(db_session, recruiter, job["job_id"])
-    _run_calendar_sync(db_session, task, [candidate.candidate_id])
-    slot = db_session.query(InterviewSlot).one()
+    with (
+        patch("app.services.interview_service.generate_slots", return_value=[]),
+        _patch_cancel_calendar_store() as store,
+        _no_op_cancel_email_dispatch() as dispatch,
+    ):
+        response = authed_client.patch(
+            f"/api/v1/interviews/{slot.slot_id}", json={"status": "CANCELLED"}
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "CANCELLED"
+    assert body["slot_id"] == str(slot.slot_id)
+    assert db_session.query(InterviewSlot).count() == 1  # no replacement row
+
+    store.return_value.create_event.assert_not_called()
+    dispatch.assert_called_once_with(str(slot.slot_id), "CANCELLATION")
+
+
+# TC-04/TC-05 (US-28): a slot with no legal path to CANCELLED is a 409, not a
+# silent no-op or a 404.
+@pytest.mark.parametrize("current_status", [SlotStatus.CANCELLED, SlotStatus.DECLINED])
+def test_cancel_terminal_slot_is_409(
+    authed_client: TestClient, db_session: Session, current_status: SlotStatus
+) -> None:
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "terminal@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"], status=current_status)
 
     response = authed_client.patch(
         f"/api/v1/interviews/{slot.slot_id}", json={"status": "CANCELLED"}
     )
-    assert response.status_code == 501
-    assert response.json()["code"] == "NOT_IMPLEMENTED"
+    assert response.status_code == 409
+    assert response.json()["code"] == "INVALID_STATE_TRANSITION"
+
+
+# TC-06 (US-28): another recruiter's slot doesn't exist for this one.
+def test_cancel_cross_tenant_slot_is_404(
+    authed_client: TestClient, db_session: Session, second_recruiter: Recruiter
+) -> None:
+    job = _create_job(authed_client)
+    recruiter = db_session.query(Recruiter).filter_by(google_user_id="stub-recruiter-sub").one()
+    candidate = _add_candidate(db_session, job["job_id"], "owner-only@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"])
+
+    other = _other_client(second_recruiter)
+    response = other.patch(f"/api/v1/interviews/{slot.slot_id}", json={"status": "CANCELLED"})
+    assert response.status_code == 404
+    assert response.json()["code"] == "SLOT_NOT_FOUND"
+
+
+# TC-07 (US-28): a Calendar delete failure must never block the cancellation
+# itself — same rule as a Calendar create failure in calendar_sync_job.
+def test_cancel_slot_calendar_delete_failure_still_cancels(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    job = _create_job(authed_client)
+    recruiter = _get_recruiter(db_session)
+    candidate = _add_candidate(db_session, job["job_id"], "cal-down@example.com")
+    slot = _make_live_slot(db_session, recruiter, candidate, job["job_id"])
+
+    with (
+        patch("app.services.interview_service.generate_slots", return_value=[]),
+        _patch_cancel_calendar_store() as store,
+        _no_op_cancel_email_dispatch(),
+    ):
+        store.return_value.delete_event.side_effect = RuntimeError("calendar down")
+        response = authed_client.patch(
+            f"/api/v1/interviews/{slot.slot_id}", json={"status": "CANCELLED"}
+        )
+
+    assert response.status_code == 200, response.text
+    db_session.expire_all()
+    assert db_session.get(InterviewSlot, slot.slot_id).status == SlotStatus.CANCELLED
 
 
 # TC-01

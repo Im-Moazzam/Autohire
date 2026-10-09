@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Recruiters can cancel a scheduled interview from the Scheduling screen; the
+  candidate is automatically rebooked into the recruiter's next open slot and
+  emailed the new time, or told the recruiter will follow up if no slot is
+  open in the next 14 days (US-28). Fills in `PATCH /interviews/{slot_id}`,
+  previously an honest `501`.
 - Admin dashboard (TS-14), hidden `/admin` route (not in Sidebar's nav list,
   reachable only by URL): cross-recruiter usage totals, account health, a
   background-task log filterable by status/type, and suspend/reactivate for

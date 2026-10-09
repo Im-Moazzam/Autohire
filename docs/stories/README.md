@@ -46,6 +46,7 @@ the register is dead** and you always have something demoable.
 | US-24 | Availability windows | Moazzam | Saif | Done |
 | US-26 | Auto-schedule interviews | Moazzam | Saif | Done (backend). Frontend not started |
 | US-27 | Interview invitation email | Moazzam | Saif | Done (backend). Frontend not started |
+| US-28 | Cancel an interview with auto-reschedule | Moazzam | Moazzam | In Progress |
 
 Build US-03 in Phase 1 even though it feels like polish. Testing-mode tokens expire
 weekly (ADR-002), so you will need it constantly from week two onward.
@@ -53,7 +54,10 @@ weekly (ADR-002), so you will need it constantly from week two onward.
 ## Out of scope — documented as future work
 
 **Phase 2:** US-05, US-07, US-08, US-09, US-10, US-14, US-17, US-20, US-21, US-22,
-US-23, US-25, US-28, US-29, US-30, US-31
+US-23, US-25, US-29, US-30, US-31
+
+US-28 was pulled forward out of Phase 2 on 2026-10-10 — see `docs/drift.md` and
+`docs/stories/US-28.md`.
 
 **Phase 3:** US-32, US-33, US-34, TS-03, TS-04, TS-05
 

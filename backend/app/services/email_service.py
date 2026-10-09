@@ -36,6 +36,50 @@ def render_invite(
     return subject, "\n".join(lines)
 
 
+def render_reschedule(
+    candidate: Candidate, job: JobPosting, slot: InterviewSlot, timezone: str
+) -> tuple[str, str]:
+    """Sent for the new slot created by interview_service.cancel_slot (US-28)
+    when the recruiter's original time had to be cancelled and a replacement
+    was auto-booked. `slot` is the new slot, not the cancelled one."""
+    local_time = slot.scheduled_at.astimezone(ZoneInfo(timezone))
+    when = local_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+
+    subject = f"Your interview has been rescheduled: {job.job_title}"
+    lines = [
+        f"Hi {candidate.full_name},",
+        "",
+        f"Your interview for {job.job_title} has been rescheduled.",
+        "",
+        f"New time: {when}",
+        f"Duration: {slot.duration_minutes} minutes",
+    ]
+    if slot.google_meet_link:
+        lines.append(f"Join: {slot.google_meet_link}")
+    lines += ["", "Sorry for the change, and see you then."]
+    return subject, "\n".join(lines)
+
+
+def render_cancellation(
+    candidate: Candidate, job: JobPosting, slot: InterviewSlot, timezone: str
+) -> tuple[str, str]:
+    """Sent when interview_service.cancel_slot (US-28) can't find a
+    replacement slot in the horizon. `slot` is the cancelled slot."""
+    local_time = slot.scheduled_at.astimezone(ZoneInfo(timezone))
+    when = local_time.strftime("%A, %B %d, %Y at %I:%M %p %Z")
+
+    subject = f"Your interview has been cancelled: {job.job_title}"
+    lines = [
+        f"Hi {candidate.full_name},",
+        "",
+        f"Your interview for {job.job_title}, originally scheduled for {when}, has"
+        " been cancelled.",
+        "",
+        "The recruiter will follow up with you directly to find a new time.",
+    ]
+    return subject, "\n".join(lines)
+
+
 def list_emails(
     db: Session,
     recruiter_id: uuid.UUID,
