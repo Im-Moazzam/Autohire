@@ -129,4 +129,77 @@ describe("scheduleOutcome", () => {
       message: "Couldn't schedule an interview.",
     });
   });
+
+  it("reports a plural success message when every candidate in a batch scheduled", () => {
+    const outcome = scheduleOutcome(
+      task({
+        status: "SUCCESS",
+        result_summary: { scheduled: 3, unscheduled: [] },
+      }),
+    );
+    expect(outcome).toEqual({
+      variant: "success",
+      message: "3 interviews scheduled — invites sent.",
+    });
+  });
+
+  it("TC-04: more candidates selected than available slots — reports both the scheduled count and the shortfall reason, not silently dropping anyone", () => {
+    const outcome = scheduleOutcome(
+      task({
+        status: "SUCCESS",
+        result_summary: {
+          scheduled: 7,
+          unscheduled: [
+            { reason: "NO_SLOT_IN_HORIZON", full_name: "A", candidate_id: "a" },
+            { reason: "NO_SLOT_IN_HORIZON", full_name: "B", candidate_id: "b" },
+          ],
+        },
+      }),
+    );
+    expect(outcome).toEqual({
+      variant: "success",
+      message:
+        "7 scheduled, 2 could not be scheduled: 2 no slot in the next 14 days.",
+    });
+  });
+
+  it("groups a batch's unscheduled candidates by distinct reason codes", () => {
+    const outcome = scheduleOutcome(
+      task({
+        status: "SUCCESS",
+        result_summary: {
+          scheduled: 1,
+          unscheduled: [
+            { reason: "NO_SLOT_IN_HORIZON", full_name: "A", candidate_id: "a" },
+            { reason: "ALREADY_SCHEDULED", full_name: "B", candidate_id: "b" },
+            { reason: "NO_SLOT_IN_HORIZON", full_name: "C", candidate_id: "c" },
+          ],
+        },
+      }),
+    );
+    expect(outcome).toEqual({
+      variant: "success",
+      message:
+        "1 scheduled, 3 could not be scheduled: 2 no slot in the next 14 days, 1 already scheduled.",
+    });
+  });
+
+  it("reports an all-failed batch as an error with the grouped reasons", () => {
+    const outcome = scheduleOutcome(
+      task({
+        status: "SUCCESS",
+        result_summary: {
+          scheduled: 0,
+          unscheduled: [
+            { reason: "NOT_RANKED", full_name: "A", candidate_id: "a" },
+            { reason: "NOT_RANKED", full_name: "B", candidate_id: "b" },
+          ],
+        },
+      }),
+    );
+    expect(outcome).toEqual({
+      variant: "error",
+      message: "Could not schedule 2 candidates: 2 not ranked.",
+    });
+  });
 });

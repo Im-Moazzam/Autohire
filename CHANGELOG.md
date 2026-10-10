@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Added
+- Bulk interview scheduling (TS-17): checkbox selection on the AI-ranked
+  tab (RANKED candidates only — scheduling requires it), a selection bar
+  ("N selected · Schedule N interviews · Clear"), and one `POST /interviews`
+  call with every selected candidate's id — reusing the batch-capable
+  backend `Candidates.tsx` never actually exercised. The schedule toast now
+  groups a batch's outcome by reason code ("7 scheduled, 2 could not be
+  scheduled: no slot in the next 14 days.") instead of only ever reporting
+  one candidate's result. `POST /interviews` now rejects an empty
+  `candidate_ids` array with 422 instead of silently enqueuing a no-op task.
+  New `Checkbox` primitive in `components/ui/`.
 - Recruiters can cancel a scheduled interview from the Scheduling screen; the
   candidate is automatically rebooked into the recruiter's next open slot and
   emailed the new time, or told the recruiter will follow up if no slot is

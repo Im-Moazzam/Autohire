@@ -36,6 +36,18 @@ export const UNSCHEDULED_REASONS: Record<string, string> = {
   CANDIDATE_NOT_FOUND: "Candidate not found.",
 };
 
+/** Short phrases for the grouped multi-candidate summary (TS-17) — the full
+ * sentences in UNSCHEDULED_REASONS read correctly standalone but not when
+ * joined ("2 This candidate already has an interview scheduled."). */
+const UNSCHEDULED_REASON_SHORT: Record<string, string> = {
+  NO_SLOT_IN_HORIZON: "no slot in the next 14 days",
+  ALREADY_SCHEDULED: "already scheduled",
+  SLOT_TIME_TAKEN: "slot time taken",
+  CALENDAR_FAILED: "calendar failed",
+  NOT_RANKED: "not ranked",
+  CANDIDATE_NOT_FOUND: "candidate not found",
+};
+
 export interface ScheduleOutcome {
   variant: "success" | "error";
   message: string;
@@ -46,11 +58,28 @@ interface ScheduleResultSummary {
   unscheduled: { reason: string }[];
 }
 
+function groupedReasonSummary(unscheduled: { reason: string }[]): string {
+  const counts = new Map<string, number>();
+  for (const { reason } of unscheduled) {
+    counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(
+      ([reason, count]) =>
+        `${count} ${
+          UNSCHEDULED_REASON_SHORT[reason] ??
+          reason.toLowerCase().replace(/_/g, " ")
+        }`,
+    )
+    .join(", ");
+}
+
 /** Pure decision of what to tell the recruiter once a CALENDAR_SYNC task
- * (from "Schedule interview") has reached a terminal state. Kept separate
- * from the component so the mapping — including the FAILED branch and the
- * "0 scheduled, reported explicitly" branch (US-26/27 TC-04) — is
- * unit-testable without a QueryClient or fetch mock. */
+ * (from "Schedule interview"/"Schedule N interviews") has reached a terminal
+ * state. Kept separate from the component so the mapping — including the
+ * FAILED branch, the single-candidate branches (US-26/27 TC-04), and the
+ * multi-candidate grouped-reason branch (TS-17) — is unit-testable without a
+ * QueryClient or fetch mock. */
 export function scheduleOutcome(task: Task): ScheduleOutcome {
   if (task.status === "FAILED") {
     return {
@@ -60,18 +89,44 @@ export function scheduleOutcome(task: Task): ScheduleOutcome {
   }
 
   const summary = task.result_summary as ScheduleResultSummary | null;
-  if (summary?.scheduled) {
+  const scheduled = summary?.scheduled ?? 0;
+  const unscheduled = summary?.unscheduled ?? [];
+
+  if (scheduled > 0 && unscheduled.length === 0) {
     return {
       variant: "success",
-      message: "Interview scheduled — invite sent.",
+      message:
+        scheduled === 1
+          ? "Interview scheduled — invite sent."
+          : `${scheduled} interviews scheduled — invites sent.`,
     };
   }
 
-  const reason = summary?.unscheduled[0]?.reason;
+  // Exactly one candidate, nothing scheduled: the original single-reason
+  // sentence reads better standalone than the grouped summary would.
+  if (scheduled === 0 && unscheduled.length === 1) {
+    const reason = unscheduled[0]?.reason;
+    return {
+      variant: "error",
+      message:
+        (reason && UNSCHEDULED_REASONS[reason]) ??
+        "Couldn't schedule an interview.",
+    };
+  }
+
+  if (unscheduled.length === 0) {
+    return { variant: "error", message: "Couldn't schedule an interview." };
+  }
+
+  // A batch: some or all candidates couldn't be scheduled, for more than one
+  // reason, or more than one candidate — the TC-04 case the backend was
+  // built for and the UI never showed before TS-17.
+  const reasonSummary = groupedReasonSummary(unscheduled);
   return {
-    variant: "error",
+    variant: scheduled > 0 ? "success" : "error",
     message:
-      (reason && UNSCHEDULED_REASONS[reason]) ??
-      "Couldn't schedule an interview.",
+      scheduled > 0
+        ? `${scheduled} scheduled, ${unscheduled.length} could not be scheduled: ${reasonSummary}.`
+        : `Could not schedule ${unscheduled.length} candidates: ${reasonSummary}.`,
   };
 }
