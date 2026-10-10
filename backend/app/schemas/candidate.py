@@ -36,7 +36,12 @@ class CandidateOut(BaseModel):
 
 class RankedCandidateOut(CandidateOut):
     rank_position: int
-    semantic_score: float
+    # The single blended score (ADR-006), served from ai_analysis_results
+    # .final_score. Named match_score rather than semantic_score because it is
+    # no longer purely semantic — returning a blend under the old name would
+    # bake a lie into the generated TypeScript client. The split (cosine vs LLM)
+    # is stored but deliberately never serialised: the recruiter sees one number.
+    match_score: float
     matched_skills: list[str]
     missing_skills: list[str]
     ai_feedback_summary: str | None

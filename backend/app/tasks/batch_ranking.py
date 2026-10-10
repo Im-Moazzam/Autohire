@@ -7,13 +7,23 @@ SUBMITTED are skipped, never scored zero (the story's headline AC). RANKED is
 included so a re-run (TC-03) has rows to rescore once nothing is PARSED
 anymore.
 
-The score is cosine similarity, computed by VectorStore, and nothing else —
-ResumeAnalysis (the LLM adapter's return type) has no score field, so an LLM
-number has nowhere to become semantic_score.
+Ranking is hybrid (ADR-006), superseding US-18's cosine-only rule. Three scores
+are written per candidate and only the last is exposed:
+
+    semantic_score — pure cosine similarity from VectorStore. Unchanged.
+    llm_score      — the analyzer's relevance judgement, 0-1. NULL in local mode.
+    final_score    — (1-w)*semantic + w*llm, ordered by, served as match_score.
+
+The weight lives in config, never in an adapter: an analyzer reports a judgement,
+it does not get to decide how much that judgement counts. With llm_score NULL,
+final_score is semantic_score alone — so a provider outage degrades to US-18's
+exact behaviour rather than penalising the candidate (TC-05).
 """
 
 import hashlib
+import logging
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from celery import Task
@@ -36,8 +46,39 @@ from app.models.job import JobPosting
 from app.schemas.enums import JobStatus, SubmissionStatus, TaskStatus
 from app.worker import celery_app
 
+logger = logging.getLogger(__name__)
+
 _RETRYABLE = (OperationalError,)
 _RANKABLE_STATUSES = (SubmissionStatus.PARSED, SubmissionStatus.RANKED)
+
+
+@dataclass(frozen=True)
+class _ScoredCandidate:
+    """Both score halves plus the analysis, held together so the sort can order
+    on final_score while the upsert still has everything it needs to write."""
+
+    candidate: Candidate
+    vector: list[float]
+    semantic_score: float
+    llm_score: float | None
+    final_score: float
+    analysis: ResumeAnalysis | None
+
+
+def _blend(semantic_score: float, relevance_score: int | None) -> tuple[float | None, float]:
+    """(llm_score, final_score) per ADR-006.
+
+    relevance_score is 0-100 from the adapter; llm_score is stored 0-1 so both
+    halves of the blend are on the same scale as semantic_score. A None
+    relevance_score (local mode, or a failed analyzer) yields cosine alone —
+    never a zero, which would read as "the model judged this candidate
+    irrelevant" when in fact it never ran.
+    """
+    if relevance_score is None:
+        return None, semantic_score
+    llm_score = relevance_score / 100.0
+    weight = settings.llm_score_weight
+    return llm_score, (1.0 - weight) * semantic_score + weight * llm_score
 
 
 @celery_app.task(
@@ -108,40 +149,68 @@ def _run_batch_ranking(db: Session, task: BackgroundTask) -> None:
 
     # One batched embed() call for every resume, not one call per candidate.
     resume_vectors = embedder.embed([c.resume_text or "" for c in candidates])
-    scored = [
-        (candidate, vector, vector_store.cosine_similarity(jd_vector, vector))
-        for candidate, vector in zip(candidates, resume_vectors, strict=True)
-    ]
 
-    # Deterministic across re-runs (TC-04): score DESC, then submitted_at ASC,
-    # then candidate_id as a final tiebreaker for genuinely identical rows.
-    scored.sort(key=lambda item: (-item[2], item[0].submitted_at, str(item[0].candidate_id)))
-
-    vector_id = f"{settings.embedding_model}:{settings.embedding_dim}"
-    processed_at = datetime.now(UTC)
-    for rank_position, (candidate, vector, score) in enumerate(scored, start=1):
+    # Analysis has to finish before ranking, not during it: under ADR-006 the
+    # sort key depends on llm_score, so every candidate must be scored on both
+    # halves before any rank_position can be assigned.
+    # ponytail: serial call per candidate — matches the demo scale this runs at
+    # (2-3 resumes) and free-tier rate limits. Parallelise only if a run ever
+    # outgrows that.
+    scored: list[_ScoredCandidate] = []
+    for candidate, vector in zip(candidates, resume_vectors, strict=True):
+        semantic_score = vector_store.cosine_similarity(jd_vector, vector)
         try:
             analysis: ResumeAnalysis | None = analyzer.analyze(
                 job.job_description, candidate.resume_text or ""
             )
         except Exception:
-            # A failed LLM pass degrades to NULL skills/feedback and does not
-            # fail the candidate — the score is already computed and is the
-            # ranking (TC-05).
+            # A failed analyzer degrades to NULL skills/feedback and cosine-only
+            # scoring; it never fails the candidate (TC-05). Logged rather than
+            # swallowed — at free-tier rate limits a silent 429 is otherwise
+            # indistinguishable from a model that had nothing to say.
+            logger.exception(
+                "analyzer failed for candidate %s; falling back to cosine-only score",
+                candidate.candidate_id,
+            )
             analysis = None
 
+        llm_score, final_score = _blend(
+            semantic_score, analysis.relevance_score if analysis else None
+        )
+        scored.append(
+            _ScoredCandidate(candidate, vector, semantic_score, llm_score, final_score, analysis)
+        )
+
+    # Ordered by the blend, then submitted_at ASC, then candidate_id as a final
+    # tiebreaker for genuinely identical rows. The tiebreak chain is unchanged
+    # from US-18; what it breaks ties on is now final_score. Re-runs no longer
+    # guarantee an identical order — ADR-006 accepts that, and a deterministic
+    # analyzer (local mode) still produces one.
+    scored.sort(
+        key=lambda item: (
+            -item.final_score,
+            item.candidate.submitted_at,
+            str(item.candidate.candidate_id),
+        )
+    )
+
+    vector_id = f"{settings.embedding_model}:{settings.embedding_dim}"
+    processed_at = datetime.now(UTC)
+    for rank_position, item in enumerate(scored, start=1):
         _upsert_analysis(
             db,
-            candidate,
+            item.candidate,
             job.job_id,
-            score,
+            item.semantic_score,
+            item.llm_score,
+            item.final_score,
             rank_position,
-            vector,
+            item.vector,
             vector_id,
             processed_at,
-            analysis,
+            item.analysis,
         )
-        candidate.submission_status = SubmissionStatus.RANKED
+        item.candidate.submission_status = SubmissionStatus.RANKED
 
     job.status = JobStatus.PROCESSED
     db.commit()
@@ -151,7 +220,9 @@ def _upsert_analysis(
     db: Session,
     candidate: Candidate,
     job_id: uuid.UUID,
-    score: float,
+    semantic_score: float,
+    llm_score: float | None,
+    final_score: float,
     rank_position: int,
     vector: list[float],
     vector_id: str,
@@ -163,7 +234,9 @@ def _upsert_analysis(
     values = {
         "candidate_id": candidate.candidate_id,
         "job_id": job_id,
-        "semantic_score": score,
+        "semantic_score": semantic_score,
+        "llm_score": llm_score,
+        "final_score": final_score,
         "rank_position": rank_position,
         "matched_skills": analysis.matched_skills if analysis else None,
         "missing_skills": analysis.missing_skills if analysis else None,

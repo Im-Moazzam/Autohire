@@ -3,6 +3,15 @@
 ## [Unreleased]
 
 ### Added
+- Real LLM analyzer (TS-15): `LlmAnalyzer` speaks OpenAI-compatible Chat
+  Completions (Gemini/Grok/Groq/OpenRouter/Ollama free tiers, no vendor SDK
+  outside `adapters/`), selected via `ANALYZER=llm` (`local` stays default for
+  CI). Its relevance score feeds a new hybrid ranking blend (ADR-006):
+  `final_score = (1 - w) * semantic_score + w * llm_score`, exposed as
+  `RankedCandidateOut.match_score`. A failed or malformed LLM response
+  degrades that candidate to cosine-only scoring rather than dropping it or
+  failing the batch. `LLM_SCORE_WEIGHT=0` reproduces US-18's original
+  pure-cosine ranking exactly.
 - Recruiters can cancel a scheduled interview from the Scheduling screen; the
   candidate is automatically rebooked into the recruiter's next open slot and
   emailed the new time, or told the recruiter will follow up if no slot is

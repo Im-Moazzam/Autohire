@@ -87,7 +87,9 @@ def test_stats_counts_jobs_by_status(authed_client: TestClient) -> None:
     assert body["jobs_by_status"]["CLOSED"] == 1
 
 
-def test_stats_counts_candidates_across_jobs(authed_client: TestClient, db_session: Session) -> None:
+def test_stats_counts_candidates_across_jobs(
+    authed_client: TestClient, db_session: Session
+) -> None:
     template = _create_template(authed_client)
     job1 = _create_job(authed_client, template["template_id"], "Job One")
     job2 = _create_job(authed_client, template["template_id"], "Job Two")

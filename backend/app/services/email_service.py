@@ -72,8 +72,7 @@ def render_cancellation(
     lines = [
         f"Hi {candidate.full_name},",
         "",
-        f"Your interview for {job.job_title}, originally scheduled for {when}, has"
-        " been cancelled.",
+        f"Your interview for {job.job_title}, originally scheduled for {when}, has been cancelled.",
         "",
         "The recruiter will follow up with you directly to find a new time.",
     ]

@@ -14,6 +14,12 @@ class ApiName(enum.StrEnum):
     GOOGLE_GMAIL = "GOOGLE_GMAIL"
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
     OPENAI = "OPENAI"
+    # One generic value rather than GEMINI/XAI/GROQ: the analyzer talks a single
+    # OpenAI-compatible wire format to whichever provider LLM_BASE_URL names, and
+    # that is app-wide config — so the provider is knowable from .env and there is
+    # no per-row detail column to split on. Adding specific values later is a
+    # one-line ALTER TYPE (drift row 16).
+    LLM = "LLM"
 
 
 class ApiUsageLog(Base):
