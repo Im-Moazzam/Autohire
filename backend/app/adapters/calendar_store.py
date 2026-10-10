@@ -25,6 +25,9 @@ class LocalCalendarStore:
         event_id = f"local-{uuid.uuid4().hex}"
         return CalendarEvent(event_id=event_id, meet_link=f"https://meet.local.test/{event_id}")
 
+    def delete_event(self, recruiter: Recruiter, event_id: str) -> None:
+        del recruiter, event_id
+
 
 class GoogleCalendarStore:
     def create_event(
@@ -64,6 +67,11 @@ class GoogleCalendarStore:
                 meet_link = entry_point.get("uri")
                 break
         return CalendarEvent(event_id=data["id"], meet_link=meet_link)
+
+    def delete_event(self, recruiter: Recruiter, event_id: str) -> None:
+        google_call(
+            recruiter, ApiName.GOOGLE_CALENDAR, "DELETE", f"{CALENDAR_EVENTS_URL}/{event_id}"
+        )
 
 
 def get_calendar_store() -> CalendarStore:

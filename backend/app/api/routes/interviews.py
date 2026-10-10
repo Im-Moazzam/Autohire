@@ -83,16 +83,35 @@ def _candidate_names(db: Session, candidate_ids: list[uuid.UUID]) -> dict[uuid.U
 @router.patch(
     "/{slot_id}",
     response_model=InterviewSlotOut,
-    responses=error_responses(401, 404, 422, 501),
+    responses=error_responses(401, 404, 409, 422, 501),
 )
-def update_interview(slot_id: uuid.UUID, payload: InterviewSlotUpdate) -> InterviewSlotOut:
-    # Genuinely Phase 2 (cancel/reschedule) — honest 501, not a fixture lookup
-    # that 404s on every real slot (TS-06/R-04).
-    del slot_id, payload
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "code": "NOT_IMPLEMENTED",
-            "message": "Rescheduling and cancelling interviews is Phase 2 and is not implemented.",
-        },
+def update_interview(
+    slot_id: uuid.UUID,
+    payload: InterviewSlotUpdate,
+    recruiter: Recruiter = Depends(get_current_recruiter),
+    db: Session = Depends(get_db),
+) -> InterviewSlotOut:
+    if payload.status != SlotStatus.CANCELLED:
+        # Everything except cancellation (direct reschedule, decline, etc.)
+        # is still genuinely Phase 2 (US-28 only covers cancel) — honest 501,
+        # not a fixture lookup that 404s on every real slot (TS-06/R-04).
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "code": "NOT_IMPLEMENTED",
+                "message": "Only cancelling an interview is implemented so far.",
+            },
+        )
+
+    slot = interview_service.cancel_slot(db, recruiter, slot_id, payload.reschedule_reason)
+    name = _candidate_names(db, [slot.candidate_id]).get(slot.candidate_id, "")
+    return InterviewSlotOut(
+        slot_id=slot.slot_id,
+        candidate_id=slot.candidate_id,
+        candidate_name=name,
+        job_id=slot.job_id,
+        scheduled_at=slot.scheduled_at,
+        duration_minutes=slot.duration_minutes,
+        status=slot.status,
+        google_meet_link=slot.google_meet_link,
     )

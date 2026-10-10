@@ -74,6 +74,8 @@ class CalendarStore(Protocol):
         attendee_email: str,
     ) -> CalendarEvent: ...
 
+    def delete_event(self, recruiter: Recruiter, event_id: str) -> None: ...
+
 
 @dataclass(frozen=True)
 class SentMessage:

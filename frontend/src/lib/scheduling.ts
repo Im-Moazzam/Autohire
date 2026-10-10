@@ -87,3 +87,19 @@ export function useScheduleInterviews() {
       api.post<Task>("/interviews", payload),
   });
 }
+
+export function useCancelInterview() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { slotId: string; reschedule_reason?: string }) =>
+      api.patch<InterviewSlot>(`/interviews/${payload.slotId}`, {
+        status: "CANCELLED",
+        reschedule_reason: payload.reschedule_reason || undefined,
+      }),
+    // A cancellation can also create a brand-new replacement row the current
+    // page doesn't know about yet — invalidate rather than patch one row in.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["interviews"] });
+    },
+  });
+}

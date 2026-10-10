@@ -4,9 +4,11 @@ import {
   Card,
   DataTable,
   Input,
+  Modal,
   Pagination,
   Select,
   StatusBadge,
+  Textarea,
 } from "../components/ui";
 import { CalendarIcon, VideoIcon } from "../components/ui/icons";
 import { useToast } from "../components/ui/Toast";
@@ -17,6 +19,7 @@ import {
   SLOT_STATUS_LABELS,
   WEEKDAY_LABELS,
   WEEKDAY_ORDER,
+  useCancelInterview,
   useInterviews,
   useSchedulingPreferences,
   useUpdateSchedulingPreferences,
@@ -201,6 +204,96 @@ function AvailabilityForm() {
   );
 }
 
+/** Cancel action for a single interview row (US-28) — only PENDING/CONFIRMED
+ * slots are cancellable; the backend auto-rebooks the candidate into the
+ * next open slot, or falls back to a cancellation-only email if none exists
+ * in the horizon. Errors stay in the modal (errorText), not a toast: this
+ * dialog is itself in the browser's top layer, so a toast fired while it's
+ * still open would render behind it. */
+function CancelInterviewAction({ slot }: { slot: InterviewSlot }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [errorText, setErrorText] = useState<string>();
+  const { showToast } = useToast();
+  const cancelInterview = useCancelInterview();
+
+  if (slot.status !== "PENDING" && slot.status !== "CONFIRMED") return null;
+
+  function close() {
+    setOpen(false);
+    setReason("");
+    setErrorText(undefined);
+  }
+
+  function handleConfirm() {
+    setErrorText(undefined);
+    cancelInterview.mutate(
+      { slotId: slot.slot_id, reschedule_reason: reason },
+      {
+        onSuccess: (updated) => {
+          close();
+          showToast(
+            updated.status === "CANCELLED"
+              ? "Interview cancelled. No open slot was found, so follow up with the candidate directly."
+              : "Interview cancelled — the candidate was rebooked into your next open slot.",
+            "success",
+          );
+        },
+        onError: (err) =>
+          setErrorText(apiErrorMessage(err, "Couldn't cancel this interview.")),
+      },
+    );
+  }
+
+  return (
+    <>
+      <Button
+        variant="destructive"
+        onClick={() => setOpen(true)}
+        className="h-9 px-3 py-0 text-helper"
+      >
+        Cancel
+      </Button>
+      <Modal
+        open={open}
+        title="Cancel this interview?"
+        onClose={close}
+        errorText={errorText}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="secondary"
+              onClick={close}
+              disabled={cancelInterview.isPending}
+            >
+              Keep interview
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirm}
+              isLoading={cancelInterview.isPending}
+            >
+              Cancel interview
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-body text-ink">
+          {slot.candidate_name} will be automatically moved to your next open
+          slot and emailed the new time. If no slot is open, they&rsquo;ll be
+          told you&rsquo;ll follow up directly.
+        </p>
+        <Textarea
+          label="Reason (optional)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="e.g. Conflicting commitment"
+        />
+      </Modal>
+    </>
+  );
+}
+
 export function Scheduling() {
   const [jobFilter, setJobFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<SlotStatus | "">("");
@@ -308,6 +401,11 @@ export function Scheduling() {
                 ) : (
                   <span className="text-muted">—</span>
                 ),
+            },
+            {
+              key: "actions",
+              header: "Actions",
+              render: (row) => <CancelInterviewAction slot={row} />,
             },
           ]}
           rows={interviews.data?.items ?? []}
