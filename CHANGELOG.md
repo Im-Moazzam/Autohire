@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- Ranked-candidate export (TS-16): `GET /jobs/{id}/candidates/export?format=csv|xlsx`
+  downloads every ranked candidate as a spreadsheet — stable identity/score
+  columns, the AI feedback block, one column per template field (in template
+  order), then submitted-at and resume URL. CSV carries a UTF-8 BOM so Excel
+  doesn't mangle non-ASCII names; both formats are capped at 5000 rows (a
+  file download, not a `Page[T]` list — documented exception, drift row 79).
+  "Download Excel" button on the AI-ranked tab of `Candidates.tsx`.
 - Recruiters can cancel a scheduled interview from the Scheduling screen; the
   candidate is automatically rebooked into the recruiter's next open slot and
   emailed the new time, or told the recruiter will follow up if no slot is

@@ -390,6 +390,29 @@ def form_responses(db: Session, candidate_id: uuid.UUID) -> list[FormResponseOut
     ]
 
 
+def responses_by_candidate(
+    db: Session, candidate_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, dict[str, str]]:
+    """Batched form-response fetch for export (TS-16) — one query across every
+    candidate on the page, mirroring ranking_exists_map's precedent (drift row
+    71) rather than calling form_responses per candidate (N+1 over a sheet)."""
+    if not candidate_ids:
+        return {}
+    rows = db.execute(
+        select(
+            CandidateFormResponse.candidate_id,
+            TemplateField.field_label,
+            CandidateFormResponse.response_value,
+        )
+        .join(TemplateField, TemplateField.field_id == CandidateFormResponse.field_id)
+        .where(CandidateFormResponse.candidate_id.in_(candidate_ids))
+    ).all()
+    result: dict[uuid.UUID, dict[str, str]] = {}
+    for candidate_id, label, value in rows:
+        result.setdefault(candidate_id, {})[label] = value or ""
+    return result
+
+
 def resume_url_for(candidate: Candidate) -> str | None:
     """Computed, never a column (docs/schema.md). Branches on the candidate's
     own stored fields, not settings.resume_store — a local write never sets

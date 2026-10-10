@@ -12,6 +12,7 @@ pypdf
 python-docx
 pgvector
 fastembed
+openpyxl
 python-multipart
 httpx
 cryptography
