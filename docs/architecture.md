@@ -104,10 +104,12 @@ trigger (recruiter clicks Process, job must be CLOSED)
        write ai_analysis_results, assign rank_position, candidate -> RANKED
 ```
 
-Keep scoring deterministic and separate from the LLM narrative. The score comes from
+~~Keep scoring deterministic and separate from the LLM narrative. The score comes from
 cosine similarity (reproducible, defensible in your viva); the LLM only *explains* it.
 If you let the LLM produce the score you cannot defend the ranking, and re-runs will
-disagree with each other.
+disagree with each other.~~ **Superseded by ADR-006** (TS-15): `final_score` now blends
+cosine similarity with a bounded, validated LLM relevance score. See the ADR for why pure
+cosine was a single point of failure and how reproducibility risk is bounded.
 
 ## Frontend structure
 

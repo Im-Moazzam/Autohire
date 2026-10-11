@@ -59,7 +59,9 @@ def _to_ranked_out(candidate: Candidate, analysis: AiAnalysisResult) -> RankedCa
     return RankedCandidateOut(
         **base.model_dump(),
         rank_position=analysis.rank_position,
-        semantic_score=analysis.semantic_score,
+        # final_score, not semantic_score — the blend is what the recruiter
+        # ranks on, and llm_score/semantic_score stay unexposed (ADR-006).
+        match_score=analysis.final_score,
         matched_skills=analysis.matched_skills or [],
         missing_skills=analysis.missing_skills or [],
         ai_feedback_summary=analysis.ai_feedback_summary,

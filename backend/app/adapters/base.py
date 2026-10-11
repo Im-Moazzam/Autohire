@@ -34,14 +34,25 @@ class ResumeStore(Protocol):
 
 @dataclass(frozen=True)
 class ResumeAnalysis:
-    """What the LLM adapter produces. Deliberately has no score field — the
-    score is cosine similarity, computed by VectorStore, and nothing here can
-    become semantic_score (US-18's headline rule)."""
+    """What the analyzer adapter produces.
+
+    US-18 deliberately gave this no score field, so that an LLM number could
+    never become semantic_score. ADR-006 reverses that: ranking is now hybrid,
+    and relevance_score is the model's half of it.
+
+    relevance_score is 0-100 (not 0-1) because a bounded integer is markedly
+    more stable across runs than a free float, and it is *not* semantic_score —
+    semantic_score stays pure cosine similarity, computed by VectorStore. The
+    blend lives in batch_ranking; an adapter never decides the weight.
+    None means the analyzer had no opinion, and final_score falls back to
+    cosine alone rather than penalising the candidate.
+    """
 
     matched_skills: list[str]
     missing_skills: list[str]
     feedback: str | None
     evidence_snippets: list[str] | None
+    relevance_score: int | None = None
 
 
 class Embedder(Protocol):

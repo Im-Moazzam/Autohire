@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.adapters.base import ResumeAnalysis
 from app.core.config import settings
 from app.models.ai_analysis_result import AiAnalysisResult
 from app.models.background_task import BackgroundTask
@@ -18,7 +19,7 @@ from app.models.recruiter import Recruiter
 from app.schemas.enums import TaskStatus, TaskType
 from app.services import task_service
 from app.services.auth_service import SESSION_COOKIE, create_session_cookie
-from app.tasks.batch_ranking import batch_ranking_job
+from app.tasks.batch_ranking import _blend, batch_ranking_job
 from tests.conftest import QueryCounter
 
 # --- deterministic fake embedder — no model download, exact TC-04/TC-07 -----
@@ -228,9 +229,18 @@ def test_reranking_replaces_rows_not_duplicates(
 # --- TC-04 ------------------------------------------------------------------
 
 
-def test_identical_resumes_rank_deterministically_across_runs(
+def test_identical_resumes_rank_deterministically_with_a_deterministic_analyzer(
     authed_client: TestClient, db_session: Session
 ) -> None:
+    """Renamed under ADR-006, which gave up exact cross-run reproducibility.
+
+    This asserts determinism *given a deterministic analyzer* — which is what it
+    has always actually tested, since it runs LocalAnalyzer (relevance_score
+    None, so final_score is cosine alone). It is no longer a guarantee about
+    production: with ANALYZER=llm, llm_score is not stable run-to-run and
+    near-tied candidates can reorder. Left under its old name it would have kept
+    passing while silently protecting nothing.
+    """
     job = _create_closed_job(authed_client)
     job_id = uuid.UUID(job["job_id"])
     recruiter = _get_recruiter(db_session)
@@ -271,9 +281,16 @@ def test_identical_resumes_rank_deterministically_across_runs(
     assert first_order == second_order
     assert first_order[a.candidate_id] == 1  # earlier submitted_at wins the tie
     assert first_order[b.candidate_id] == 2
-    # Reproducibility of the number itself, not just the ordering — the thing
-    # that has to be defensible as "the score is cosine similarity, full stop".
+    # Reproducibility of the number itself, not just the ordering. The cosine
+    # half stays fully reproducible under ADR-006 — that is what keeps the
+    # embedding contribution defensible even though the blend is not.
     assert first_scores == second_scores
+
+    # Local mode contributes no LLM opinion, so the blend must collapse to
+    # cosine exactly rather than treating "no judgement" as a zero.
+    for row in db_session.query(AiAnalysisResult).filter_by(job_id=job_id).all():
+        assert row.llm_score is None
+        assert row.final_score == row.semantic_score
 
 
 # --- TC-05 --------------------------------------------------------------------
@@ -302,8 +319,157 @@ def test_analyzer_failure_leaves_score_and_rank_intact(
     assert row.semantic_score is not None
     assert row.matched_skills is None
     assert row.ai_feedback_summary is None
+    # ADR-006: a provider outage must not be scored as "irrelevant". llm_score
+    # stays NULL and the blend falls back to cosine alone, so an infrastructure
+    # failure never costs the candidate rank.
+    assert row.llm_score is None
+    assert row.final_score == row.semantic_score
     db_session.refresh(candidate)
     assert candidate.submission_status == "RANKED"
+
+
+# --- ADR-006: hybrid scoring ------------------------------------------------
+
+
+def _fake_analyzer(score_by_resume: dict[str, int | None]):
+    """An analyzer whose relevance_score is dictated per resume text, so a test
+    can set the LLM half independently of the cosine half."""
+
+    def analyze(jd_text: str, resume_text: str) -> ResumeAnalysis:
+        return ResumeAnalysis(
+            matched_skills=["python"],
+            missing_skills=[],
+            feedback="fake",
+            evidence_snippets=None,
+            relevance_score=score_by_resume[resume_text],
+        )
+
+    return patch(
+        "app.tasks.batch_ranking.get_analyzer", return_value=Mock(analyze=Mock(side_effect=analyze))
+    )
+
+
+@pytest.mark.parametrize(
+    ("semantic", "relevance", "weight", "expected_llm", "expected_final"),
+    [
+        # No LLM opinion -> cosine alone, never a zero.
+        (0.80, None, 0.3, None, 0.80),
+        # 0-100 in, 0-1 stored, weighted blend out.
+        (0.80, 60, 0.3, 0.60, 0.74),
+        # Weight 0 is the escape hatch: the LLM is consulted but cannot move the
+        # score at all.
+        (0.80, 10, 0.0, 0.10, 0.80),
+        # Weight 1 would hand ranking entirely to the model; ADR-006 rejects it
+        # as a setting but the arithmetic must still be the obvious thing.
+        (0.80, 10, 1.0, 0.10, 0.10),
+    ],
+)
+def test_blend_arithmetic(
+    semantic: float,
+    relevance: int | None,
+    weight: float,
+    expected_llm: float | None,
+    expected_final: float,
+) -> None:
+    with patch.object(settings, "llm_score_weight", weight):
+        llm_score, final_score = _blend(semantic, relevance)
+    assert (
+        llm_score == pytest.approx(expected_llm) if expected_llm is not None else llm_score is None
+    )
+    assert final_score == pytest.approx(expected_final)
+
+
+def test_llm_score_weight_zero_reproduces_pure_cosine_ranking(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """The US-18 regression guard: at weight 0 the blend is additive-but-inert,
+    so ranking is byte-identical to pre-ADR-006 behaviour even though the
+    analyzer ran and returned a score. This is what makes the weight a genuine
+    escape hatch rather than a knob that merely dampens the LLM."""
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    strong = _add_candidate(db_session, job_id, "s@example.com", "python and sql expert")
+    weak = _add_candidate(db_session, job_id, "w@example.com", "unrelated pastry chef")
+
+    # The LLM insists the weak candidate is perfect and the strong one is
+    # hopeless — the exact inversion weight 0 must ignore.
+    task = _make_task_row(db_session, recruiter, job_id)
+    with (
+        _patch_embedder(),
+        _fake_analyzer({"python and sql expert": 0, "unrelated pastry chef": 100}),
+        patch.object(settings, "llm_score_weight", 0.0),
+    ):
+        batch_ranking_job.run(str(task.task_id))
+
+    db_session.expire_all()
+    rows = {
+        r.candidate_id: r for r in db_session.query(AiAnalysisResult).filter_by(job_id=job_id).all()
+    }
+    for row in rows.values():
+        assert row.final_score == row.semantic_score
+    # Ordering follows cosine, not the model's opinion.
+    assert (rows[strong.candidate_id].semantic_score > rows[weak.candidate_id].semantic_score) == (
+        rows[strong.candidate_id].rank_position < rows[weak.candidate_id].rank_position
+    )
+
+
+def test_llm_score_can_outrank_a_higher_cosine_score(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """The point of ADR-006: neither signal decides alone. A candidate the
+    embeddings rank lower can win on the blend when the model rates them far
+    higher — and the stored halves show exactly why."""
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    a = _add_candidate(db_session, job_id, "a@example.com", "python sql resume text")
+    b = _add_candidate(db_session, job_id, "b@example.com", "different wording entirely")
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    with (
+        _patch_embedder(),
+        _fake_analyzer({"python sql resume text": 0, "different wording entirely": 100}),
+        patch.object(settings, "llm_score_weight", 0.9),
+    ):
+        batch_ranking_job.run(str(task.task_id))
+
+    db_session.expire_all()
+    rows = {
+        r.candidate_id: r for r in db_session.query(AiAnalysisResult).filter_by(job_id=job_id).all()
+    }
+    assert rows[b.candidate_id].llm_score == 1.0
+    assert rows[a.candidate_id].llm_score == 0.0
+    # At w=0.9 the model's verdict dominates, so b outranks a regardless of
+    # which way the fake embedder happened to order them.
+    assert rows[b.candidate_id].final_score > rows[a.candidate_id].final_score
+    assert rows[b.candidate_id].rank_position == 1
+
+
+def test_ranked_endpoint_exposes_only_the_blended_score(
+    authed_client: TestClient, db_session: Session
+) -> None:
+    """ADR-006 stores the split and withholds it: the recruiter sees one number.
+    A leaked semantic_score/llm_score would invite arguing with the weighting."""
+    job = _create_closed_job(authed_client)
+    job_id = uuid.UUID(job["job_id"])
+    recruiter = _get_recruiter(db_session)
+    _add_candidate(db_session, job_id, "a@example.com", "python developer")
+
+    task = _make_task_row(db_session, recruiter, job_id)
+    with _patch_embedder(), _fake_analyzer({"python developer": 70}):
+        batch_ranking_job.run(str(task.task_id))
+
+    response = authed_client.get(f"/api/v1/jobs/{job_id}/candidates/ranked")
+    assert response.status_code == 200, response.text
+    item = response.json()["items"][0]
+    assert "match_score" in item
+    assert "semantic_score" not in item
+    assert "llm_score" not in item
+    assert "final_score" not in item
+
+    row = db_session.query(AiAnalysisResult).filter_by(job_id=job_id).one()
+    assert item["match_score"] == pytest.approx(row.final_score)
 
 
 # --- TC-06 ----------------------------------------------------------------
