@@ -390,7 +390,11 @@ function BulkScheduleButton({
       ) : (
         <CalendarIcon className="h-4 w-4" />
       )}
-      {isBusy ? "Scheduling…" : `Schedule ${candidateIds.length} interviews`}
+      {isBusy
+        ? "Scheduling…"
+        : `Schedule ${candidateIds.length} interview${
+            candidateIds.length === 1 ? "" : "s"
+          }`}
     </button>
   );
 }
