@@ -28,7 +28,16 @@ class AiAnalysisResult(Base):
     job_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("job_postings.job_id", ondelete="CASCADE"), nullable=False
     )
+    # Three scores, one exposed (ADR-006). semantic_score keeps US-18's exact
+    # meaning — pure cosine similarity — so it is never repurposed; llm_score is
+    # the model's half, NULL in local mode or when the analyzer failed; and
+    # final_score is the blend that rank_position orders by and that the API
+    # serialises as match_score. The split is stored so a ranking can be
+    # explained after the fact, and withheld from the API so the recruiter sees
+    # one number.
     semantic_score: Mapped[float] = mapped_column(Float(), nullable=False)
+    llm_score: Mapped[float | None] = mapped_column(Float(), nullable=True)
+    final_score: Mapped[float] = mapped_column(Float(), nullable=False)
     rank_position: Mapped[int] = mapped_column(Integer(), nullable=False)
     matched_skills: Mapped[list[str] | None] = mapped_column(JSONB(), nullable=True)
     missing_skills: Mapped[list[str] | None] = mapped_column(JSONB(), nullable=True)

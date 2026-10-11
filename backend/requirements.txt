@@ -13,6 +13,10 @@ python-docx
 pgvector
 fastembed
 openpyxl
+# ANALYZER=llm only. Used as a generic OpenAI-compatible Chat Completions client
+# against free-tier providers (Gemini, Grok, Ollama) — not for the OpenAI API
+# itself, which this project does not use. See ADR-006 / .env.example.
+openai
 python-multipart
 httpx
 cryptography

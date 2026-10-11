@@ -31,7 +31,10 @@ def list_ranked_candidates(
         .where(Candidate.job_id == job_id, Candidate.deleted_at.is_(None))
     )
     if min_score is not None:
-        base = base.where(AiAnalysisResult.semantic_score >= min_score)
+        # Filters on the blend, not the cosine half — min_score has to mean the
+        # same number the recruiter sees as match_score, or the filter silently
+        # disagrees with the column it appears to act on (ADR-006).
+        base = base.where(AiAnalysisResult.final_score >= min_score)
     if skill:
         base = base.where(AiAnalysisResult.matched_skills.contains([skill]))
     total = db.scalar(select(func.count()).select_from(base.subquery())) or 0

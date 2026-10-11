@@ -472,7 +472,12 @@ function RankedCard({
       </div>
 
       <div className="flex flex-col gap-2 border-t border-border pt-4">
-        <MatchScore score={candidate.semantic_score} className="w-full" />
+        <MatchScore score={candidate.match_score} className="w-full" />
+        {candidate.ai_feedback_summary && (
+          <p className="text-body text-muted">
+            {candidate.ai_feedback_summary}
+          </p>
+        )}
       </div>
 
       {(candidate.matched_skills.length > 0 ||

@@ -457,6 +457,9 @@ def test_restorable_status_ranked_when_analysis_row_exists(
             candidate_id=candidate.candidate_id,
             job_id=uuid.UUID(job["job_id"]),
             semantic_score=0.82,
+            # No llm_score (local/failed analyzer) — final_score falls back
+            # to semantic_score alone, per ADR-006.
+            final_score=0.82,
             rank_position=1,
         )
     )

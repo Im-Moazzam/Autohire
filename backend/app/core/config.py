@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     mailer: str = "local"  # local | gmail
     calendar_store: str = "local"  # local | google
     embedder: str = "fastembed"  # fastembed | openai (openai not implemented)
+    analyzer: str = "local"  # local | llm
 
     # Fail loudly: nothing works safely without these.
     token_encryption_key: str
@@ -35,10 +36,20 @@ class Settings(BaseSettings):
     # a wrong env var gives a silent per-container re-download, not an error.
     embedding_cache_dir: str = "/models"
 
-    # Reserved for a future LLM-feedback adapter (matched/missing skills,
-    # feedback narrative) — not the embedder. TS-07 kept scoring on fastembed
-    # only (drift.md); not dead, just not read by anything today.
-    openai_api_key: str = ""
+    # ANALYZER=llm talks OpenAI-compatible Chat Completions, which Gemini, Grok,
+    # Groq, OpenRouter and Ollama all speak — so the provider is a base_url, not
+    # a vendor SDK, and switching is three lines of .env with no code change.
+    # Only free tiers are in scope for this project; see .env.example.
+    llm_base_url: str = ""
+    llm_model: str = ""
+    llm_api_key: str = ""
+    # Hybrid ranking weight (ADR-006): final = (1-w)*cosine + w*llm.
+    # 0.0 reproduces US-18's pure-cosine ordering exactly — the escape hatch if
+    # the model proves unreliable, and asserted by a test.
+    llm_score_weight: float = 0.3
+    # Free tiers are token-limited and resume_parser imposes no ceiling, so the
+    # resume is truncated before it reaches a prompt.
+    llm_max_resume_chars: int = 6000
 
     smtp_host: str = "mailhog"
     smtp_port: int = 1025

@@ -1154,8 +1154,8 @@ export interface components {
             restorable_status: components["schemas"]["SubmissionStatus"];
             /** Rank Position */
             rank_position: number;
-            /** Semantic Score */
-            semantic_score: number;
+            /** Match Score */
+            match_score: number;
             /** Matched Skills */
             matched_skills: string[];
             /** Missing Skills */
