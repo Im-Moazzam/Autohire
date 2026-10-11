@@ -544,7 +544,18 @@ def test_schedule_interviews_route_unknown_candidate_is_404(authed_client: TestC
         json={"job_id": job["job_id"], "candidate_ids": [str(uuid.uuid4())]},
     )
     assert response.status_code == 404
-    assert response.json()["code"] == "CANDIDATE_NOT_FOUND"
+
+
+# TS-17: an empty array previously enqueued a no-op CALENDAR_SYNC task.
+def test_schedule_interviews_route_empty_array_is_422(authed_client: TestClient) -> None:
+    _set_preferences(authed_client)
+    job = _create_job(authed_client)
+
+    response = authed_client.post(
+        "/api/v1/interviews",
+        json={"job_id": job["job_id"], "candidate_ids": []},
+    )
+    assert response.status_code == 422
 
 
 def test_list_interviews_route_returns_scheduled_slot(

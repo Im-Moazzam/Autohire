@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import {
+  Checkbox,
   DataTable,
   EmptyState,
   Input,
@@ -301,6 +302,104 @@ function ScheduleInterviewButton({
   );
 }
 
+/** TS-17: the batch form of ScheduleInterviewButton — same task-polling flow
+ * (useScheduleInterviews -> useTask -> invalidate -> toast), only the array
+ * passed to POST /interviews and the toast copy (scheduleOutcome already
+ * groups multi-candidate outcomes, TC-04) differ. */
+function BulkScheduleButton({
+  candidateIds,
+  jobId,
+  onDone,
+}: {
+  candidateIds: string[];
+  jobId: string | undefined;
+  onDone: () => void;
+}) {
+  const { showToast, dismissToast } = useToast();
+  const queryClient = useQueryClient();
+  const scheduleInterviews = useScheduleInterviews();
+  const [taskId, setTaskId] = useState<string | undefined>();
+  const toastIdRef = useRef<number | null>(null);
+  const task = useTask(taskId);
+
+  useEffect(() => {
+    if (!taskId || !task.data || !isTerminal(task.data.status)) return;
+
+    setTaskId(undefined);
+    if (toastIdRef.current !== null) {
+      dismissToast(toastIdRef.current);
+      toastIdRef.current = null;
+    }
+    queryClient.invalidateQueries({ queryKey: ["candidates", jobId] });
+    queryClient.invalidateQueries({ queryKey: ["interviews"] });
+
+    const outcome = scheduleOutcome(task.data);
+    showToast(outcome.message, outcome.variant);
+    onDone();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task.data?.status]);
+
+  useEffect(() => {
+    return () => {
+      if (toastIdRef.current !== null) dismissToast(toastIdRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function handleClick() {
+    if (!jobId || candidateIds.length === 0) return;
+    scheduleInterviews.mutate(
+      { job_id: jobId, candidate_ids: candidateIds },
+      {
+        onSuccess: (t) => {
+          setTaskId(t.task_id);
+          toastIdRef.current = showToast(
+            `Scheduling ${candidateIds.length} interviews…`,
+            "loading",
+          );
+        },
+        onError: (err) => {
+          const message =
+            apiErrorCode(err) === "NO_SCHEDULING_PREFERENCES"
+              ? "Set your interview availability in Scheduling first."
+              : apiErrorMessage(err, "Couldn't schedule interviews.");
+          showToast(message, "error");
+        },
+      },
+    );
+  }
+
+  const isBusy =
+    scheduleInterviews.isPending ||
+    (task.data ? !isTerminal(task.data.status) : !!taskId);
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={isBusy || candidateIds.length === 0}
+      className={buttonClassName({
+        variant: "primary",
+        className: "gap-2 disabled:opacity-40",
+      })}
+    >
+      {isBusy ? (
+        <span
+          className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
+      ) : (
+        <CalendarIcon className="h-4 w-4" />
+      )}
+      {isBusy
+        ? "Scheduling…"
+        : `Schedule ${candidateIds.length} interview${
+            candidateIds.length === 1 ? "" : "s"
+          }`}
+    </button>
+  );
+}
+
 function CandidateDetailModal({
   candidateId,
   jobId,
@@ -431,10 +530,16 @@ function RankedCard({
   candidate,
   jobId,
   onOpen,
+  selected,
+  onToggleSelect,
 }: {
   candidate: RankedCandidate;
   jobId: string | undefined;
   onOpen: (candidateId: string) => void;
+  /** Selection only applies to RANKED candidates — enqueue_scheduling
+   * requires it, same gate ScheduleInterviewButton already uses below. */
+  selected?: boolean;
+  onToggleSelect?: (candidateId: string) => void;
 }) {
   return (
     <div
@@ -451,6 +556,15 @@ function RankedCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
+          {candidate.submission_status === "RANKED" && onToggleSelect && (
+            <span onClick={(e) => e.stopPropagation()} className="pt-1">
+              <Checkbox
+                checked={!!selected}
+                onChange={() => onToggleSelect(candidate.candidate_id)}
+                aria-label={`Select ${candidate.full_name} for bulk scheduling`}
+              />
+            </span>
+          )}
           <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ai/10 text-helper font-semibold text-ai">
             #{candidate.rank_position}
           </span>
@@ -530,6 +644,9 @@ export function Candidates() {
   const [status, setStatus] = useState<SubmissionStatus | "">("");
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<Set<string>>(
+    new Set(),
+  );
   const [processTaskId, setProcessTaskId] = useState<string | undefined>();
   const [rankTaskId, setRankTaskId] = useState<string | undefined>();
   // "loading" toasts never auto-dismiss (Toast.tsx) — this one has to be
@@ -614,6 +731,22 @@ export function Candidates() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rankTask.data?.status]);
+
+  // Selection is tab-local — leaving the ranked tab (or the job's ranked set
+  // changing under it, e.g. after a re-rank) should not leave a stale
+  // selection a recruiter never sees.
+  useEffect(() => {
+    setBulkSelectedIds(new Set());
+  }, [tab]);
+
+  function toggleBulkSelect(candidateId: string) {
+    setBulkSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(candidateId)) next.delete(candidateId);
+      else next.add(candidateId);
+      return next;
+    });
+  }
 
   function handleStartRanking() {
     if (!jobId) return;
@@ -843,6 +976,27 @@ export function Candidates() {
               Download Excel
             </a>
           )}
+          {bulkSelectedIds.size > 0 && (
+            <div className="flex items-center justify-between gap-4 rounded-control bg-primary-soft px-4 py-3">
+              <span className="text-body font-medium text-ink">
+                {bulkSelectedIds.size} selected
+              </span>
+              <div className="flex items-center gap-3">
+                <BulkScheduleButton
+                  candidateIds={[...bulkSelectedIds]}
+                  jobId={jobId}
+                  onDone={() => setBulkSelectedIds(new Set())}
+                />
+                <button
+                  type="button"
+                  onClick={() => setBulkSelectedIds(new Set())}
+                  className="text-body font-medium text-muted transition-colors hover:text-ink"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {ranked.data!.items.map((c) => (
               <RankedCard
@@ -850,6 +1004,8 @@ export function Candidates() {
                 candidate={c}
                 jobId={jobId}
                 onOpen={setSelectedId}
+                selected={bulkSelectedIds.has(c.candidate_id)}
+                onToggleSelect={toggleBulkSelect}
               />
             ))}
           </div>

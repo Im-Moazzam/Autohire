@@ -10,6 +10,16 @@
   doesn't mangle non-ASCII names; both formats are capped at 5000 rows (a
   file download, not a `Page[T]` list — documented exception, drift row 79).
   "Download Excel" button on the AI-ranked tab of `Candidates.tsx`.
+- Bulk interview scheduling (TS-17): checkbox selection on the AI-ranked
+  tab (RANKED candidates only — scheduling requires it), a selection bar
+  ("N selected · Schedule N interviews · Clear"), and one `POST /interviews`
+  call with every selected candidate's id — reusing the batch-capable
+  backend `Candidates.tsx` never actually exercised. The schedule toast now
+  groups a batch's outcome by reason code ("7 scheduled, 2 could not be
+  scheduled: no slot in the next 14 days.") instead of only ever reporting
+  one candidate's result. `POST /interviews` now rejects an empty
+  `candidate_ids` array with 422 instead of silently enqueuing a no-op task.
+  New `Checkbox` primitive in `components/ui/`.
 - Real LLM analyzer (TS-15): `LlmAnalyzer` speaks OpenAI-compatible Chat
   Completions (Gemini/Grok/Groq/OpenRouter/Ollama free tiers, no vendor SDK
   outside `adapters/`), selected via `ANALYZER=llm` (`local` stays default for

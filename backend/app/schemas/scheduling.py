@@ -87,7 +87,10 @@ class InterviewCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     job_id: uuid.UUID
-    candidate_ids: list[uuid.UUID]
+    # min_length=1: an empty array currently enqueues a no-op CALENDAR_SYNC
+    # task — input validation at a trust boundary, not something to be lazy
+    # about (TS-17).
+    candidate_ids: list[uuid.UUID] = Field(min_length=1)
 
 
 class InterviewSlotUpdate(BaseModel):
