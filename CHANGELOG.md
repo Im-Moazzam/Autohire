@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- Ranked-candidate export (TS-16): `GET /jobs/{id}/candidates/export?format=csv|xlsx`
+  downloads every ranked candidate as a spreadsheet — stable identity/score
+  columns, the AI feedback block, one column per template field (in template
+  order), then submitted-at and resume URL. CSV carries a UTF-8 BOM so Excel
+  doesn't mangle non-ASCII names; both formats are capped at 5000 rows (a
+  file download, not a `Page[T]` list — documented exception, drift row 79).
+  "Download Excel" button on the AI-ranked tab of `Candidates.tsx`.
 - Real LLM analyzer (TS-15): `LlmAnalyzer` speaks OpenAI-compatible Chat
   Completions (Gemini/Grok/Groq/OpenRouter/Ollama free tiers, no vendor SDK
   outside `adapters/`), selected via `ANALYZER=llm` (`local` stays default for

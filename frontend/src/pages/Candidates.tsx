@@ -16,6 +16,7 @@ import {
   ArrowLeftIcon,
   CalendarIcon,
   CheckIcon,
+  DownloadIcon,
   FileTextIcon,
   LockIcon,
   RotateCcwIcon,
@@ -825,16 +826,34 @@ export function Candidates() {
           icon={<SparklesIcon />}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {ranked.data!.items.map((c) => (
-            <RankedCard
-              key={c.candidate_id}
-              candidate={c}
-              jobId={jobId}
-              onOpen={setSelectedId}
-            />
-          ))}
-        </div>
+        <>
+          {(ranked.data?.total ?? 0) > 0 && (
+            <a
+              href={
+                resumeHref(
+                  `/api/v1/jobs/${jobId}/candidates/export?format=xlsx`,
+                ) ?? undefined
+              }
+              className={buttonClassName({
+                variant: "secondary",
+                className: "gap-2 w-fit",
+              })}
+            >
+              <DownloadIcon className="h-4 w-4" />
+              Download Excel
+            </a>
+          )}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {ranked.data!.items.map((c) => (
+              <RankedCard
+                key={c.candidate_id}
+                candidate={c}
+                jobId={jobId}
+                onOpen={setSelectedId}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       <CandidateDetailModal

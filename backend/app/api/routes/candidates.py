@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Literal
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -119,6 +121,28 @@ def list_ranked_candidates(
         total=total,
         page=params.page,
         size=params.size,
+    )
+
+
+@job_candidates_router.get(
+    "/{job_id}/candidates/export",
+    responses=error_responses(401, 404),
+)
+def export_candidates(
+    format: Literal["csv", "xlsx"] = Query(default="xlsx"),
+    job: JobPosting = Depends(get_owned_job),
+    db: Session = Depends(get_db),
+) -> Response:
+    rows = ranking_service.export_rows(db, job.job_id)
+    responses_map = candidate_service.responses_by_candidate(
+        db, [candidate.candidate_id for candidate, _ in rows]
+    )
+    content, media_type = ranking_service.build_export_file(job, rows, responses_map, format)
+    filename = ranking_service.export_filename(job, format)
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
