@@ -17,6 +17,7 @@ import {
   ArrowLeftIcon,
   CalendarIcon,
   CheckIcon,
+  DownloadIcon,
   FileTextIcon,
   LockIcon,
   RotateCcwIcon,
@@ -959,6 +960,22 @@ export function Candidates() {
         />
       ) : (
         <>
+          {(ranked.data?.total ?? 0) > 0 && (
+            <a
+              href={
+                resumeHref(
+                  `/api/v1/jobs/${jobId}/candidates/export?format=xlsx`,
+                ) ?? undefined
+              }
+              className={buttonClassName({
+                variant: "secondary",
+                className: "gap-2 w-fit",
+              })}
+            >
+              <DownloadIcon className="h-4 w-4" />
+              Download Excel
+            </a>
+          )}
           {bulkSelectedIds.size > 0 && (
             <div className="flex items-center justify-between gap-4 rounded-control bg-primary-soft px-4 py-3">
               <span className="text-body font-medium text-ink">

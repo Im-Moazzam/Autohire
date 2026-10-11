@@ -3,6 +3,13 @@
 ## [Unreleased]
 
 ### Added
+- Ranked-candidate export (TS-16): `GET /jobs/{id}/candidates/export?format=csv|xlsx`
+  downloads every ranked candidate as a spreadsheet — stable identity/score
+  columns, the AI feedback block, one column per template field (in template
+  order), then submitted-at and resume URL. CSV carries a UTF-8 BOM so Excel
+  doesn't mangle non-ASCII names; both formats are capped at 5000 rows (a
+  file download, not a `Page[T]` list — documented exception, drift row 79).
+  "Download Excel" button on the AI-ranked tab of `Candidates.tsx`.
 - Bulk interview scheduling (TS-17): checkbox selection on the AI-ranked
   tab (RANKED candidates only — scheduling requires it), a selection bar
   ("N selected · Schedule N interviews · Clear"), and one `POST /interviews`
