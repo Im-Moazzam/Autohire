@@ -27,7 +27,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from celery import Task
-from celery.exceptions import Retry, SoftTimeLimitExceeded
+from celery.exceptions import Retry
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import OperationalError
@@ -102,9 +102,12 @@ def batch_ranking_job(self: Task, task_id: str) -> None:
 
         try:
             _run_batch_ranking(db, task)
-        except (SoftTimeLimitExceeded, Retry):
+        except Retry:
             raise
         except Exception as exc:
+            # Includes SoftTimeLimitExceeded: a hung provider call must still
+            # free the job for another "Rank candidates" attempt, not leave
+            # this row stuck RUNNING forever behind the active-task guard.
             task.status = TaskStatus.FAILED
             task.error_message = str(exc)
             task.completed_at = datetime.now(UTC)

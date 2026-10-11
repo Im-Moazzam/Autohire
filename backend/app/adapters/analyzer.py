@@ -131,7 +131,20 @@ class LlmAnalyzer:
         # the local path stays importable in a bare environment.
         from openai import OpenAI
 
-        self._client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
+        # timeout: without it the SDK defaults to 10 minutes, which outlives
+        # Celery's hard time limit on the batch job — a hung provider call
+        # then kills the whole batch instead of just this one candidate.
+        # max_retries=0: the SDK's own retry-on-error wrapper can catch and
+        # swallow Celery's SoftTimeLimitExceeded signal mid-request and retry
+        # instead of letting it propagate, defeating the task's own
+        # except-and-mark-FAILED handling. _complete() above already retries
+        # once itself, so a second retry layer is redundant, not just risky.
+        self._client = OpenAI(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key,
+            timeout=30.0,
+            max_retries=0,
+        )
 
     def analyze(self, jd_text: str, resume_text: str) -> ResumeAnalysis:
         user_prompt = (
